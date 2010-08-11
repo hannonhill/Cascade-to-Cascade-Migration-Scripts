@@ -1,33 +1,72 @@
-Summary
+Summary:
 ========
 
-SOAP Web Services scripts using Cascade Server's WSDL that can intelligently migrate content from one instance of Cascade to another.
+PHP-based SOAP Web Services scripts using Cascade Server's WSDL to do intelligent copying of assets.
 
-This script copies assets between sites in Cascade or from one
-instance of Cascade to another.  You can recursively copy folders
-or containers, or copy entire sites.
+Can copy assets between Sites in a single Cascade instance or from one
+instance of Cascade to another.  You can recursively copy Folders
+or Containers, or copy entire Sites.
 
-Installation
-============
+Installation:
+=============
 
 Edit index.php and change the list of environments (circa line 20) to match your needs. 
 Then copy this folder to your web server.
 
-Usage
-=====
+Usage:
+======
 
 Connect with a web browser and fill in the form.
 E.g. https://www.example.edu/copy-site/
 
-Notes, Limitations and Known Issues
-===================================
+Notes:
+======
 
-The target site must already exist before running this script.
+The script copies content from one Site to another. The target Site must already exist before running this script.
+
+When copying Groups from one instance of Cascade to another, we only
+preserve group members who have accounts on the target system, so if
+you want an exact copy of a Group, you need to create all the member
+accounts first.
+
+If an asset refers to something outside the Folder being copied, we may
+change that reference. For example, we can't copy an Index Block if the
+Folder that it indexes doesn't exist in the target system. What we do
+in this case is that we create the Index Block, but leave the "Indexed
+Folder" property blank.
+
+After everything is copied, we go back and copy all the access rights.
+So, if copying is interrupted by an error, access rights will not
+be set.  Originally, access rights were set during the copy, but this
+caused too many dependency issues.
+
+There are many dependencies between assets in Cascade. We follow
+dependencies when copying, and may need to copy more than you'd think.
+or example, when copying a Folder, we may need to copy the Folder's
+Metadata Set, or Groups that have access to that folder. When copying a
+Group, we may need to copy its base asset factory, and so on.
+
+Occasionally, there are interdependencies that make it impossible to
+copy some assets. For example, an "events" Block uses the "event" Content
+Type, which uses the "event" Configuration Set, which includes a region
+that uses the "event" Block. Before you can copy the Block, you have to
+copy the content type and configuration set, but before you can copy
+the Configuration Set, you need to copy the Block.
+
+Limitations and Known Issues:
+=============================
+
+Copying does not preserve folder order.
+
+Copying does not update urls and system-asset tags that are hard-coded
+in files.
+
+You may not be able to copy very large files due to php memory limits.
 
 We never change existing assets. If any of the assets you are 
 copying already exist in the destination site, we skip over them.
 
-Unfortunately, there are some things we just can't copy.
+Unfortunately, there are some things we can't copy.
 
 Due to a Web Services bug in the early Cascade 6.4 releases (CSCD-6242; fixed in 6.4.2 and later), 
 we are unable to copy assets with null dynamic metadata values (empty strings are ok,
@@ -46,16 +85,9 @@ We can't copy Site Destinations. Due to a bug in web services, you
 can't create a destination inside a site if you specify it's
 parentContainerPath; it only works if you specify the parentContainerId.
 
-Copying does not preserve folder order.
-
-Copying does not update urls and system-asset tags that are hard-coded
-in files.
-
-You may not be able to copy very large files due to php memory limits.
-
 When you use web services to read an Asset Factory that has plugins
 assigned, the plugins aren't shown in the returned asset. So when you
-copy such an asset factory, the assigned plugins are lost (CSCD-4464).
+copy such an asset factory, the assigned plugins are lost (CSCD-4464; as yet unfixed).
 
 Prior to 6.4, Cascade ignored sitename/siteid when reading Blocks,
 Formats, References, and Templates. So when copying these from one Site
@@ -66,41 +98,12 @@ Prior to 6.4, when reading xml with web services, the entire xml was
 returned on one line (CSCD-4129; fixed in 6.4 and later).
 
 In Cascade 6.0, we were unable to copy Asset Factories of type Format.
-I haven't tested this in 6.4 yet.
-
-There are many dependencies between assets in Cascade. We follow
-dependencies when copying, and may need to copy more than you'd think.
-or example, when copying a Folder, we may need to copy the Folder's
-Metadata Set, or Groups that have access to that folder. When copying a
-Group, we may need to copy its base asset factory, and so on.
-
-Occasionally, there are interdependencies that make it impossible to
-copy some assets. For example, an "events" Bage uses the "event" Content
-Type, which uses the "event" Configuration Set, which includes a region
-that uses the "event" Block. Before you can copy the Block, you have to
-copy the content type and configuration set, but before you can copy
-the Configuration Set, you need to copy the Block.
-
-When copying Groups from one instance of Cascade to another, we only
-preserve group members who have accounts on the target system, so if
-you want an exact copy of a Group, you need to create all the member
-accounts first.
-
-If an asset refers to something outside the Folder being copied, we may
-change that reference. For example, we can't copy an Index Block if the
-Folder that it indexes doesn't exist in the target system. What we do
-in this case is that we create the Index Block, but leave the "Indexed
-Folder" property blank.
+I haven't tested this in 6.4 yet. (Currently unconfirmed by Hannon Hill)
 
 We can't copy Connectors yet.
 
-After everything is copied, we go back and copy all the access rights.
-So, if copying is interrupted by an error, access rights will not
-be set.  Originally, access rights were set during the copy, but this
-caused too many dependency issues.
-
-Working with other Cascade versions
-===================================
+Working with other Cascade versions:
+====================================
 
 There are a few places in index.php and cascade_soap_lib.php
 where we list all known asset types or container types, or both.

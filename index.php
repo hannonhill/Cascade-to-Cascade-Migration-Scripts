@@ -1570,9 +1570,13 @@ function showForm() {
 <tr><th align="left">Site</th>
 <td>
     <input type="text" name="site1" value="$oldSite" />
-</td><td>
+    
+</td>
+<td>
     <input type="text" name="site2" $site2_str />
-</td></tr>
+    <span>&lt;sitename&gt; or <em>Global</em> to copy from/to the Global area</span>
+</td>
+</tr>
 <tr><th align="left"> Web Services Username</th>
 <td>
     <input type="text" name="username1" value="$uname" />
@@ -1602,8 +1606,7 @@ function showForm() {
 <tr><th align="left">Assets to Skip</th>
 <td colspan="2">
     <input type="text" name="skipPattern" value="$skipPattern" />
-    <em>(e.g. images/ or .mp3)
-    </select><br />
+    <em>(e.g. images/ or .mp3)<br />
 </td></tr>
 <tr><th align="left">Options</th>
 <td colspan="2">

@@ -47,11 +47,11 @@ Metadata Set, or Groups that have access to that folder. When copying a
 Group, we may need to copy its base asset factory, and so on.
 
 Occasionally, there are interdependencies that make it impossible to
-copy some assets. For example, an "events" Block uses the "event" Content
-Type, which uses the "event" Configuration Set, which includes a region
-that uses the "event" Block. Before you can copy the Block, you have to
-copy the content type and configuration set, but before you can copy
-the Configuration Set, you need to copy the Block.
+copy some assets. For example, an "events" Content Type Index Block 
+that indexes the "event" Content Type, which uses the "event" Configuration 
+Set, which includes a region that contains the "event" Content Type Index Block. 
+Before you can copy the Block, you have to copy the content type and configuration 
+set, but before you can copy the Configuration Set, you need to copy the Block.
 
 Limitations and Known Issues:
 =============================

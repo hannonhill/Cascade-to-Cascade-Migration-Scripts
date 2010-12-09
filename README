@@ -27,21 +27,16 @@ Notes and Known Problems
 
     Unfortunately, there are some things we just can't copy.
 
-    Due to a bug in Cascade 6.4 web services (CSCD-6242), we are unable to
+    In Cascade 6.4 web services (CSCD-6242), we were unable to
     copy assets with null dynamic metadata values (empty strings are ok,
     but null values are not). This happens when you add fields to a
-    metadata set after creating a page. If you see a Read Error error
-    during a copy, try editing the page in Cascade. You don't have to
-    change anything, just edit and save. Editing will change the null
-    values to empty strings, allowing the copy to proceed. Of course, you
-    can also run into Read Errors if your web services user does not have
-    permission to access the asset in question.
+    metadata set after creating a page.
 
     When copying Users and FTP Transports, we can't copy their passwords,
     because you can't read passwords using Cascade web services.
 
-    We can't copy Site Destinations. Due to a bug in web services, you
-    can't create a destination inside a site if you specify it's
+    We can't copy Site Destinations. Due to a bug in web services (CSI-72),
+    you can't create a destination inside a site if you specify it's
     parentContainerPath; it only works if you specify the
     parentContainerId.
 
@@ -65,7 +60,7 @@ Notes and Known Problems
     returned on one line (CSCD-4129).
 
     In Cascade 6.0, we were unable to copy asset factories of type Format.
-    I haven't tested this in 6.4 yet.
+    I haven't tested this recently.
 
     There are many dependencies between assets in Cascade. We follow
     dependencies when copying, and may need to copy more than you'd think.

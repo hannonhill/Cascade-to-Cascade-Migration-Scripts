@@ -98,6 +98,12 @@ Notes and Known Problems
     be set.  Originally, I set access rights as I went along, but this
     caused too many interdependency issues.
 
+    Note that when you use Cascade to copy a folder, it doesn't preserve
+    access rights.  Someday I may add an option to the script to just copy
+    access rights.  That way you'd be able to copy a site in Cascade,
+    then fix permissions with this script.
+
+
 Working with other Cascade versions
 ===================================
 

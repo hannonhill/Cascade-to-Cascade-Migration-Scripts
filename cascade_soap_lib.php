@@ -15,7 +15,6 @@ class CascadeSoapClient {
     var $response;
     var $asset;
 
-
     function connect() {
       try {
 	$this->client = new SoapClient($this->url, array('trace' => 1));
@@ -27,7 +26,6 @@ class CascadeSoapClient {
 	exit;
       }
     }
-
 
     /* Read an asset from Cascade with web services.
      * Create an associative array that we will pass to the PHP
@@ -209,7 +207,7 @@ class CascadeSoapClient {
 
 
     /*
-     * Get access rights with web services
+     * Read access rights with web services
      */
     function readAccessRights($id) {
 
@@ -271,7 +269,6 @@ class CascadeSoapClient {
     }
 }
 
-
 #
 # Clients should never see entityType, but Cascade includes
 # it when we read assets, so we remove it here.  Otherwise,
@@ -325,7 +322,7 @@ function clean_asset(&$obj) {
 	'feedBlock',
 	'indexBlock',
 	'textBlock',
-	'xhtmlBlock',
+#	'xhtmlBlock',
 	'xmlBlock',
 	'file',
 	'folder',
@@ -344,8 +341,8 @@ function clean_asset(&$obj) {
 	'contentTypeContainer',
 	'pageConfigurationSet',
 	'pageConfigurationSetContainer',
-	'structuredDataDefinition',
-	'structuredDataDefinitionContainer',
+	'dataDefinition',
+	'dataDefinitionContainer',
 	'metadataSet',
 	'metadataSetContainer',
 	'publishSet',
@@ -363,6 +360,7 @@ function clean_asset(&$obj) {
 	'twitterConnector',
 	'wordPressConnector',
 	'site',
+	'xhtmlDataDefinitionBlock',
     );
     foreach ($types as $type) {
 	if (!$obj->$type) unset($obj->$type);

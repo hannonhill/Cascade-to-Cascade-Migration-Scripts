@@ -5,7 +5,7 @@
   instance of Cascade to another.  You can recursively copy folders
   or containers and all their contents, or copy entire sites.
 
-  This is version 1.2 for Cascade 6.4.
+  This is version 1.4 for Cascade 6.7.3.
 
   Based on the copy-folder script in Hannon Hill's CAST toolkit.
 
@@ -22,7 +22,6 @@ $environments = array(
       'Cascade Production'  => 'prod.example.edu',
 );
 $secure = 1;	# whether to use http or https to connect to web services
-
 /* You shouldn't have to change anything below this line */
 $verbose = 2;
 $dryrun = 0;
@@ -34,6 +33,10 @@ ob_end_flush();
 
 if (!empty($_POST) && validateInput()) {
     showForm();
+    #echo "Get ready, get set and ...";
+    #echo "<pre>";
+    #print_r($_POST);
+    #echo "</pre>";
     echo "<pre>";
     update();
     echo "</pre>";
@@ -84,7 +87,7 @@ function update() {
   $adminAreas = array(
       'assetFactory', 'contentType',
       'metaDataSet', 'pageConfigurationSet', 'publishSet',
-      'structuredDataDefinition',
+      'dataDefinition',
       #'transport',
       'workflowDefinition'
       );
@@ -106,7 +109,17 @@ function update() {
       add_container($oldPath,$copytype);
     } else if (in_array($copytype,$adminAreas)) {
       checkAdminAsset($oldPath,$copytype);
-    } else {
+    } else if ($copytype == 'user') {		// copy one or more users
+       $oldPaths = preg_split("/ +/", $oldPath);
+       foreach ($oldPaths as &$oldPath) {
+	 checkUser($oldPath);
+       }
+    } else if ($copytype == 'group') {		// copy one or more groups
+       $oldPaths = preg_split("/ +/", $oldPath);
+       foreach ($oldPaths as &$oldPath) {
+	 checkGroup($oldPath);
+       }
+    } else {					// home area asset
       checkAsset($oldPath,$copytype);
     }
 
@@ -242,6 +255,10 @@ function checkAsset($path, $type) {
     global $checked;
     global $exit_on_error;
 
+    if (preg_match("/block_.*/",$type)) {
+	$type = "block";
+    }
+
     #
     # see if we've already checked it
     #
@@ -332,8 +349,8 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
 	$type = "feedBlock";
       } else if (isset($asset->xmlBlock)) {
 	$type = "xmlBlock";
-      } else if (isset($asset->xhtmlBlock)) {
-	$type = "xhtmlBlock";
+      } else if (isset($asset->xhtmlDataDefinitionBlock)) {
+	$type = "xhtmlDataDefinitionBlock";
       } else if (isset($asset->xsltFormat)) {
 	$type = "xsltFormat";
       } else if (isset($asset->scriptFormat)) {
@@ -358,7 +375,7 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
     }
     # remove [system-asset] tags from symlinks
     if ($type == 'symlink' && isset($asset->$type->linkURL)) {
-	$asset->$type->linkURL = 
+	$asset->$type->linkURL =
 	    preg_replace('#\[system-asset(?::id=\w+)?\]([^\[]*)\[/system-asset\]#',
 	    '$1', $asset->$type->linkURL);
     }
@@ -371,7 +388,7 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
     }
     if (isset($asset->$type->structuredData) &&
 	is_string($asset->$type->structuredData->definitionPath)) {
-      checkAdminAsset($asset->$type->structuredData->definitionPath,'structuredDataDefinition');
+      checkAdminAsset($asset->$type->structuredData->definitionPath,'dataDefinition');
     }
     if (isset($asset->$type->configurationSetPath)) {
       checkAdminAsset($asset->$type->configurationSetPath,'pageConfigurationSet');
@@ -417,7 +434,7 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
     }
     if (isset($asset->$type->structuredData) &&
         is_string($asset->$type->structuredData->definitionPath)) {
-      checkAdminAsset($asset->$type->structuredData->definitionPath,'structuredDataDefinition');
+      checkAdminAsset($asset->$type->structuredData->definitionPath,'dataDefinition');
     }
     if (isset($asset->$type->structuredData) &&
         isset($asset->$type->structuredData->structuredDataNodes)) {
@@ -761,15 +778,15 @@ if ($verbose>2) echo "Checking $type $path\n";
     } else if ($type == 'contentType') {
       unset($asset->$type->metadataSetId);
       unset($asset->$type->pageConfigurationSetId);
-      unset($asset->$type->structuredDataDefinitionId);
+      unset($asset->$type->dataDefinitionId);
       if (isset($asset->$type->metadataSetPath)) {
 	  checkAdminAsset($asset->$type->metadataSetPath,'metaDataSet');
       }
       if (isset($asset->$type->pageConfigurationSetPath)) {
 	  checkAdminAsset($asset->$type->pageConfigurationSetPath,'pageConfigurationSet');
       }
-      if (isset($asset->$type->structuredDataDefinitionPath)) {
-	  checkAdminAsset($asset->$type->structuredDataDefinitionPath,'structuredDataDefinition');
+      if (isset($asset->$type->dataDefinitionPath)) {
+	  checkAdminAsset($asset->$type->dataDefinitionPath,'dataDefinition');
       }
     }
     //print_r($asset);
@@ -892,7 +909,7 @@ function add_container($path,$type) {
 	"assetFactoryContainer",
 	"pageConfigurationSetContainer",
 	"contentTypeContainer",
-	"structuredDataDefinitionContainer",
+	"dataDefinitionContainer",
 	"metadataSetContainer",
 	"publishSetContainer",
 	"siteDestinationContainer",
@@ -901,7 +918,7 @@ function add_container($path,$type) {
 	"assetFactory",
 	"pageConfigurationSet",
 	"contentType",
-	"structuredDataDefinition",
+	"dataDefinition",
 	"metaDataSet",
 	"publishSet",
 	"destination",
@@ -1030,6 +1047,8 @@ if ($verbose>2) echo "Checking $type " . getName($group) . "...\n";
 	$writeClient->read($id);
 	if ($writeClient->success) {
 	  array_push($newusers,$user);
+	} else {
+	  if ($verbose>1) echo "*** Skipping user $user\n";
 	}
       }
       $asset->$type->users = join(';',$newusers);
@@ -1499,10 +1518,11 @@ function showForm() {
 	'block', 'file', 'page', 'reference', 'format', 'symlink', 'template',
 	'assetFactoryContainer', 'contentTypeContainer',
 	'metadataSetContainer', 'pageConfigurationSetContainer', 'publishSetContainer',
-	'structuredDataDefinitionContainer', 'workflowDefinitionContainer',
+	'dataDefinitionContainer', 'workflowDefinitionContainer',
 	'assetFactory', 'contentType',
 	'metaDataSet', 'pageConfigurationSet', 'publishSet',
-	'structuredDataDefinition', 'workflowDefinition',
+	'dataDefinition', 'workflowDefinition',
+	'user', 'group',
     );
     if ($oldSite != 'Global' && $newSite != 'Global') { # new "Sites"
       #array_push($types, 'connector');
@@ -1634,7 +1654,10 @@ With <strong>Verbose</strong> we report in more detail.<br/>
 With <strong>Persevere...</strong> we try to ignore errors and continue copying.<br/>
 </p>
 
-<p>To copy an entire site, first create an empty site, then run this script, setting Type to <strong>Site</strong> and Folder/Container to <strong>/</strong>.
+<p>To copy an entire site, first create the site, then do the copy,
+setting <strong>Type=Site</strong> and <strong>Folder=/</strong>.
+<br />
+To copy from or to the Global area, set <strong>Site=Global</strong>.
 </p>
 
 <p>

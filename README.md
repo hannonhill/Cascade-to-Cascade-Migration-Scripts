@@ -40,6 +40,11 @@ So, if copying is interrupted by an error, access rights will not
 be set.  Originally, access rights were set during the copy, but this
 caused too many dependency issues.
 
+When you use Cascade to copy a folder, it doesn't preserve
+access rights.  Someday I may add an option to the script to just copy
+access rights.  That way you'd be able to copy a site in Cascade,
+then fix permissions with this script.
+
 There are many dependencies between assets in Cascade. We follow
 dependencies when copying, and may need to copy more than you'd think.
 or example, when copying a Folder, we may need to copy the Folder's
@@ -81,9 +86,10 @@ permission to access the asset in question.
 When copying Users and FTP Transports, we can't copy their passwords,
 because you can't read passwords using Cascade web services.
 
-We can't copy Site Destinations. Due to a bug in web services, you
-can't create a destination inside a site if you specify it's
-parentContainerPath; it only works if you specify the parentContainerId.
+We can't copy Site Destinations. Due to a bug in web services, [CSI-72](http://issues.hannonhill.com/browse/CSI-72),  
+you can't create a destination inside a site if you specify it's
+parentContainerPath; it only works if you specify the
+parentContainerId.
 
 When you use web services to read an Asset Factory that has plugins
 assigned, the plugins aren't shown in the returned asset. So when you
@@ -98,7 +104,7 @@ Prior to 6.4, when reading xml with web services, the entire xml was
 returned on one line (CSCD-4129; fixed in 6.4 and later).
 
 In Cascade 6.0, we were unable to copy Asset Factories of type Format.
-I haven't tested this in 6.4 yet. (Currently unconfirmed by Hannon Hill)
+I haven't tested this recently. (Currently unconfirmed by Hannon Hill)
 
 We can't copy Connectors yet.
 

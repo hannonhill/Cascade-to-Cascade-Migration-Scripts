@@ -6,7 +6,30 @@ intelligent copying of assets.
 
 This script copies assets between sites in Cascade, between
 sites and the Global area, and from one instance of Cascade to another. 
-You can recursively copy folders or containers or copy entire sites. 
+You can recursively copy folders or containers or copy entire sites.
+
+Version Compatibility and Working with other Cascade versions:
+==============================================================
+
+This script (v1.6) works with Cascade 6.7, 6.8 and 6.10.
+
+Previous versions include:
+
+- [v1.4](https://github.com/hannonhill/Cascade-to-Cascade-Migration-Scripts/zipball/v1.4) is compatible with Cascade 6.7.x
+- [v1.2](https://github.com/hannonhill/Cascade-to-Cascade-Migration-Scripts/zipball/v1.2) is compatible with Cascade 6.4.x
+
+There are a few places in the code where we list all asset types or 
+container types. When Hannon Hill updates Cascade web services, we
+need to update these lists. 
+
+For example, in Cascade 6.7 structuredDataDefinition was renamed to
+dataDefinition and xhtmlBlock was renamed to xhtmlDataDefinitionBlock.
+
+If you'd like to get this script working with a new version of Cascade,
+the first place to look is Hannon Hill's web services
+change log:
+
+http://www.hannonhill.com/kb/Web-Services/Web%20Services%20Changelog/
 
 Installation:
 =============
@@ -141,24 +164,3 @@ copy them as well.
 In Cascade, when you copy assets, they inherit access rights from
 their new parent folder.  When you copy assets with this script, it copies
 their access rights as well.
-
-Working with other Cascade versions:
-====================================
-
-This script works with Cascade 6.7, 6.8 and 6.10.
-
-An older version that works with Cascade 6.4 is also available.
-
-There are a few places in the code where we list all asset types or 
-container types. When Hannon Hill updates Cascade web services, we
-need to update these lists. 
-
-For example, in Cascade 6.7 structuredDataDefinition was renamed to
-dataDefinition and xhtmlBlock was renamed to xhtmlDataDefinitionBlock.
-
-If you'd like to get this script working with a new version of Cascade,
-the first place to look is Hannon Hill's web services
-change log:
-
-http://www.hannonhill.com/kb/Web-Services/Web%20Services%20Changelog/
-

@@ -5,13 +5,14 @@
   instance of Cascade to another.  You can recursively copy folders
   or containers and all their contents, or copy entire sites.
 
-  This is version 1.4 for Cascade 6.7.3.
+  This is version 1.6.1 for Cascade 6.7, 6.8 and 6.10
 
   Based on the copy-folder script in Hannon Hill's CAST toolkit.
 
   */
-//error_reporting(E_ALL ^ E_NOTICE);	# ignore undefined variables
-//ini_set("display_errors",1);
+error_reporting(E_ALL ^ E_NOTICE);	# ignore undefined variables
+ini_set("display_errors",1);
+ini_set("max_execution_time",300);
 ini_set("memory_limit",'256M');
 include_once("cascade_soap_lib.php");
 
@@ -45,70 +46,74 @@ if (!empty($_POST) && validateInput()) {
 }
 
 function update() {
-  global $host, $host2;
-  global $uname, $uname2;
-  global $pass, $pass2;
-  global $oldPath, $newPath;
-  global $oldSite, $newSite;
-  global $readClient, $writeClient;
-  global $copytype;
-  global $dryrun;
-  global $verbose;
-  global $secure;
+    global $host, $host2;
+    global $uname, $uname2;
+    global $pass, $pass2;
+    global $oldPath, $newPath;
+    global $oldSite, $newSite;
+    global $readClient, $writeClient;
+    global $copytype;
+    global $dryrun;
+    global $verbose;
+    global $secure;
 
-  $proto = 'http';
-  if ($secure) $proto = 'https';
+    $proto = 'http';
+    if ($secure) $proto = 'https';
 
-  $readClient = new CascadeSoapClient();
-  if (preg_match('/^http/', $host)) {
-      $readClient->url = $host . "/ws/services/AssetOperationService?wsdl";
-  } else {
-      $readClient->url = "$proto://" . $host . "/ws/services/AssetOperationService?wsdl";
-  }
-  #echo "From $readClient->url<br/>\n";
-  $readClient->username = $uname;
-  $readClient->password = $pass;
-  $readClient->connect();
+    $readClient = new CascadeSoapClient();
+    if (preg_match('/^http/', $host)) {
+	$readClient->url = $host . "/ws/services/AssetOperationService?wsdl";
+    } else {
+	$readClient->url = "$proto://" . $host . "/ws/services/AssetOperationService?wsdl";
+    }
+    #echo "From $readClient->url<br/>\n";
+    $readClient->username = $uname;
+    $readClient->password = $pass;
+    $readClient->connect();
 
-  $writeClient = new CascadeSoapClient();
-  if (preg_match('/^http/', $host2)) {
-      $writeClient->url = $host2 . "/ws/services/AssetOperationService?wsdl";
-  } else {
-      $writeClient->url = "$proto://$host2/ws/services/AssetOperationService?wsdl";
-  }
-  #echo "To $writeClient->url<br/>\n";
-  $writeClient->username = $uname2;
-  $writeClient->password = $pass2;
-  $writeClient->connect();
+    $writeClient = new CascadeSoapClient();
+    if (preg_match('/^http/', $host2)) {
+	$writeClient->url = $host2 . "/ws/services/AssetOperationService?wsdl";
+    } else {
+	$writeClient->url = "$proto://$host2/ws/services/AssetOperationService?wsdl";
+    }
+    #echo "To $writeClient->url<br/>\n";
+    $writeClient->username = $uname2;
+    $writeClient->password = $pass2;
+    $writeClient->connect();
 
-  #
-  # admin areas to include when we copy sites
-  #
-  $adminAreas = array(
-      'assetFactory', 'contentType',
-      'metaDataSet', 'pageConfigurationSet', 'publishSet',
-      'dataDefinition',
-      #'transport',
-      'workflowDefinition'
-      );
-  if ($oldSite == 'Global' && $newSite == 'Global') {        # old "sites"
-      array_push($adminAreas, 'target');
-  } else if ($oldSite != 'Global' && $newSite != 'Global') { # new "Sites"
-      #array_push($adminAreas, 'connector');
-      array_push($adminAreas, 'transport');
-      #array_push($adminAreas, 'destination');
-  }
+    if ($oldSite == 'Global')
+	$oldSite = '';
+    if ($newSite == 'Global')
+	$newSite = '';
+
+    #
+    # admin areas to include when we copy sites
+    #
+    $adminAreas = array(
+	'assetFactory', 'contentType', 'dataDefinition',
+	'metadataSet', 'pageConfigurationSet', 'publishSet',
+	#'transport',
+	'workflowDefinition'
+	);
+    if ($oldSite == '' && $newSite == '') {        # old "sites"
+	array_push($adminAreas, 'target');
+    } else if ($oldSite != '' && $newSite != '') { # new "Sites"
+	#array_push($adminAreas, 'connector');
+	array_push($adminAreas, 'transport');
+	array_push($adminAreas, 'destination');
+    }
 
 
-  if ($dryrun) echo "Dry Run:\n";
+    if ($dryrun) echo "Dry Run:\n";
 
     echo "Copying $copytype $host/$oldSite:$oldPath to $host2/$newSite:$newPath\n";
     if ($copytype == 'folder' || $copytype == 'site') {
-      add_folder($oldPath);
+      add_folder(NULL,$oldPath);
     } else if (preg_match('/Container$/',$copytype)) {
-      add_container($oldPath,$copytype);
+      add_container(NULL,$oldPath,$copytype);
     } else if (in_array($copytype,$adminAreas)) {
-      checkAdminAsset($oldPath,$copytype);
+      checkAdminAsset(NULL,$oldPath,$copytype);
     } else if ($copytype == 'user') {		// copy one or more users
        $oldPaths = preg_split("/ +/", $oldPath);
        foreach ($oldPaths as &$oldPath) {
@@ -120,7 +125,7 @@ function update() {
 	 checkGroup($oldPath);
        }
     } else {					// home area asset
-      checkAsset($oldPath,$copytype);
+      checkAsset(NULL,$oldPath,$copytype);
     }
 
     if ($copytype == 'site') {
@@ -134,16 +139,16 @@ function update() {
 	} else {
 	  $type = $adminArea . "Container";
 	}
-	add_container($checkPath,$type);
+	add_container(NULL,$checkPath,$type);
       }
     }
 
-  setPermissions();
-  if ($dryrun) {
-    echo "Dry Run Complete\n";
-  } else {
-    echo "Done.\n";
-  }
+    setPermissions();
+    if ($dryrun) {
+      echo "Dry Run Complete\n";
+    } else {
+      echo "Done.\n";
+    }
 }
 
 
@@ -151,7 +156,7 @@ function update() {
 /*
 * Read the folder, push its children, make the folder, then pop remaining children 
 */
-function add_folder($path) {
+function add_folder($id,$path) {
     global $oldPath;
     global $oldSite, $newSite;
     global $readClient, $writeClient;
@@ -161,13 +166,19 @@ function add_folder($path) {
     global $genericStack;
     global $templateStack;
     global $skipPattern;
-    global $checked;
+    global $added;
     global $exit_on_error;
 
     $type = 'folder';
-    if (isset($checked["$type.$path"])) {
+    #
+    # have we already checked folder *and* children?
+    #
+    if (isset($added["$type.$path"])) {
       return;
+    } else {
+      $added["$type.$path"] = 1;
     }
+
     if (isset($skipPattern) && preg_match("#$skipPattern#i",$path)) {
        echo "*** Skipping $type $path\n";
        return;
@@ -176,17 +187,21 @@ function add_folder($path) {
     #
     # create the folder itself
     #
-    checkFolder($path);
+    checkFolder($id, $path);
 
     #
-    # and all its children
+    # and its children
     #
-    $id->path = $path;
-    $id->siteName = $oldSite;
-    $id->type = "folder";
-    $readClient->read($id);
+    if (isset($id)) {
+      $ident->id = $id;
+    }
+    $ident->path = $path;
+    $ident->siteName = $oldSite;
+    $ident->type = "folder";
+    $readClient->read($ident);
     if (!$readClient->success) {
-      echo "Failed reading: " . $path . "\n";
+      echo "Failed reading: $type " . $path . "\n";
+      echo print_r($ident);
       echo cleanup($readClient->response);
       if ($exit_on_error) cleanexit(); else return;
     }
@@ -217,27 +232,27 @@ function add_folder($path) {
     }
     if (is_array($folderStack)) {
       while ($cur = array_pop($folderStack)) {
-	add_folder($cur->path->path);
+	add_folder($cur->id,$cur->path->path);
       }
     }
     if (is_array($genericStack)) {
       while ($cur = array_pop($genericStack)) {
-	checkAsset($cur->path->path, $cur->type);
+	checkAsset($cur->id,$cur->path->path, $cur->type);
       }
     }
     if (is_array($templateStack)) {
       while ($cur = array_pop($templateStack)) {
-	checkAsset($cur->path->path, $cur->type);
+	checkAsset($cur->id,$cur->path->path, $cur->type);
       }
     }
     if (is_array($pageStack)) {
       while ($cur = array_pop($pageStack)) {
-	checkAsset($cur->path->path, $cur->type);
+	checkAsset($cur->id,$cur->path->path, $cur->type);
       }
     }
     if (is_array($refStack)) {
       while ($cur = array_pop($refStack)) {
-	checkAsset($cur->path->path, $cur->type);
+	checkAsset($cur->id,$cur->path->path, $cur->type);
       }
     }
 }
@@ -245,7 +260,7 @@ function add_folder($path) {
 /*
  * Read in the file, block, symlink, or ... and add it directly 
  */
-function checkAsset($path, $type) {
+function checkAsset($id, $path, $type) {
     global $oldPath, $newPath;
     global $oldSite, $newSite;
     global $readClient, $writeClient;
@@ -254,9 +269,13 @@ function checkAsset($path, $type) {
     global $verbose;
     global $checked;
     global $exit_on_error;
+    global $newId;
+    global $extension;
 
     if (preg_match("/block_.*/",$type)) {
 	$type = "block";
+    } else if (preg_match("/format_.*/",$type)) {
+	$type = "format";
     }
 
     #
@@ -275,71 +294,58 @@ function checkAsset($path, $type) {
        return;
     }
 
-  #
-  # reference to another site
-  #
-  if (preg_match('/^(.*):(.*)/',$path,$matches)) {
-    global $host, $host2;
-    if ($host == $host2) {
-      if ($verbose>2) echo "Ok: $type $path\n";
-      return;
-    } else {
-      preg_match('/^(.*):(.*)/',$path,$matches);
-      $site = $matches[1];
-      $path = $matches[2];
-      if ($verbose>2) echo "Checking $type $site:$path\n";
-      $id->path = $path;
-      $id->siteName = $site;
-      $id->type = strtolower($type);
-      $writeClient->read($id);
-      if (!$writeClient->success) {
-	  if (preg_match('/Unable to identify an entity/',$writeClient->response)) {
-	      echo "
+    #
+    # reference to another site
+    #
+    if (preg_match('/^(.*):(.*)/',$path,$matches)) {
+      global $host, $host2;
+      if ($host == $host2) {
+	if ($verbose>2) echo "Ok: $type $path\n";
+	return;
+      } else {
+	$site = $matches[1];
+	$path = $matches[2];
+	if ($verbose>2) echo "Checking $type $site:$path\n";
+	$newident->path = $path;
+	$newident->siteName = $site;
+	$newident->type = strtolower($type);
+	$writeClient->read($newident);
+	if (!$writeClient->success) {
+	    if (preg_match('/Unable to identify an entity/',$writeClient->response)) {
+		echo "
 *** Found cross-site reference to $site $type $path, which does not exist in the
 target environment.  You must change this before the copy can proceed.
 ";
-	  } else {
-	      echo "Failed reading: " . $site . ' ' . $path . "\n";
-	      echo print_r($id);
-	      echo cleanup($writeClient->response);
-	  }
-	  if ($exit_on_error) cleanexit(); else return;
-      }
-      return;
-    }
-  }
-
-    #
-    # see if asset already exists in new location
-    #
-if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
-    $id->path = getPath($path);
-    $id->siteName = $newSite;
-    $id->type = $type;
-    $writeClient->read($id);
-    if ($writeClient->success) {
+	    } else {
+		echo "Failed reading: " . $site . ': ' . $path . "\n";
+		echo print_r($newident);
+		echo cleanup($writeClient->response);
+	    }
+	    if ($exit_on_error) cleanexit(); else return;
+	}
 	return;
-    } else if (preg_match('/Unable to identify/',$writeClient->response)) {
-      #echo "Can't find " . $id->path . " in " . $id->siteName . "\n";
-    } else {
-      echo "Read failure on destination: " . getPath($path) . cleanup($writeClient->response);
-      print_r($id);
-      if ($exit_on_error) cleanexit(); else return;
+      }
     }
 
     #
-    # read source asset and copy to destination
+    # read source asset
     #
-    $id->path = $path;
-    $id->siteName = $oldSite;
-    $id->type = $type;
-    $readClient->read($id);
+    if ($verbose>2) echo "Checking $type $path\n";
+    if (isset($id)) {
+      $ident->id = $id;
+    }
+    $ident->path = $path;
+    $ident->siteName = $oldSite;
+    $ident->type = $type;
+    $readClient->read($ident);
     if (!$readClient->success) {
-      echo "Read failure on $path: " . cleanup($readClient->response);
-      print_r($id);
+      echo "Read failure on $type $path: " . cleanup($readClient->response);
+      print_r($ident);
       if ($exit_on_error) cleanexit(); else return;
     }
     $asset = $readClient->asset;
+
+    $otype = $type;
     if (!isset($asset->$type)) {
       if (isset($asset->indexBlock)) {
 	$type = "indexBlock";
@@ -349,6 +355,8 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
 	$type = "feedBlock";
       } else if (isset($asset->xmlBlock)) {
 	$type = "xmlBlock";
+      } else if (isset($asset->xhtmlBlock)) {
+	$type = "xhtmlBlock";
       } else if (isset($asset->xhtmlDataDefinitionBlock)) {
 	$type = "xhtmlDataDefinitionBlock";
       } else if (isset($asset->xsltFormat)) {
@@ -357,6 +365,60 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
 	$type = "scriptFormat";
       }
     }
+
+    #
+    # workaround http://issues.hannonhill.com/browse/CSI-145
+    # if asset is in a different site, we're done
+    # (this should never happen)
+    #
+    if ($asset->$type->siteName != $oldSite) {
+      global $host, $host2;
+      if ($host == $host2) {
+	  $newId[$id] = $id;
+      }
+      if ($verbose>2) 
+	echo "Skipping $type $path (site " . $asset->$type->siteName . ")\n";
+      #print_r($asset);
+      return;
+    }
+
+    #
+    # save asset id to get around CSI-108
+    #
+    $ident->id = $asset->$type->id;
+
+    #
+    # see if asset already exists in new location
+    #
+    $parent = preg_replace("#/[^/]*$#", "", $path);
+    if (isset($checked["folder.$parent"])) {
+	# we know it doesn't exist
+	#echo "Not checking $type: $path\n";
+    } else if (isset($newId["$otype.$path"])) {
+	# we know it does exist
+	$newId[$asset->$type->id] = $newId["$otype.$path"];
+#echo "Found new Id for $type $path\n";
+	return;
+    } else {
+      if ($verbose>3) echo "Checking new $type: " . getPath($path) . "\n";
+      $newident->path = getPath($path);
+      $newident->siteName = $newSite;
+      $newident->type = $ident->type;
+      $writeClient->read($newident);
+      if ($writeClient->success) {
+	  $newasset = $writeClient->asset;
+	  $newId[$asset->$type->id] = $newasset->$type->id;
+#echo "Found2 new Id for $type $path\n";
+	  return;
+      } else if (preg_match('/Unable to identify/',$writeClient->response)) {
+	#echo "Can't find " . $newident->path . " in $newSite\n";
+      } else {
+	echo "Read failure on destination: " . getPath($path) . cleanup($writeClient->response);
+	print_r($newident);
+	if ($exit_on_error) cleanexit(); else return;
+      }
+    }
+
     if ($type == 'xsltFormat') {
 	$asset->$type->xml = preg_replace(
 	    '#1.0"xmlns#', '1.0" xmlns', $asset->$type->xml);
@@ -380,30 +442,26 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
 	    '$1', $asset->$type->linkURL);
     }
     if (isset($asset->$type->parentFolderPath)) {
-      checkFolder($asset->$type->parentFolderPath);
+      checkFolder($asset->$type->parentFolderId,$asset->$type->parentFolderPath);
       $asset->$type->parentFolderPath = getPath($asset->$type->parentFolderPath);
     }
     if (isset($asset->$type->metadataSetPath)) {
-      checkAdminAsset($asset->$type->metadataSetPath,'metaDataSet');
-    }
-    if (isset($asset->$type->structuredData) &&
-	is_string($asset->$type->structuredData->definitionPath)) {
-      checkAdminAsset($asset->$type->structuredData->definitionPath,'dataDefinition');
+      checkAdminAsset($asset->$type->metadataSetId,$asset->$type->metadataSetPath,'metadataSet');
     }
     if (isset($asset->$type->configurationSetPath)) {
-      checkAdminAsset($asset->$type->configurationSetPath,'pageConfigurationSet');
+      checkAdminAsset($asset->$type->configurationSetId,$asset->$type->configurationSetPath,'pageConfigurationSet');
     } else {
       unset($asset->$type->configurationSetPath);
     }
     if (isset($asset->$type->contentTypePath)) {
-      checkAdminAsset($asset->$type->contentTypePath,"contentType");
+      checkAdminAsset($asset->$type->contentTypeId,$asset->$type->contentTypePath,"contentType");
     }
     if (isset($asset->$type->indexedContentTypePath)) {
-      checkAdminAsset($asset->$type->indexedContentTypePath,"contentType");
+      checkAdminAsset($asset->$type->IndexedContentTypeId,$asset->$type->indexedContentTypePath,"contentType");
     }
     if (isset($asset->$type->indexedFolderPath)) {
       if (want($asset->$type->indexedFolderPath,'folder')) {
-	checkAsset($asset->$type->indexedFolderPath,'folder');
+	checkAsset($asset->id,$asset->$type->indexedFolderPath,'folder');
 	$asset->$type->indexedFolderPath = getPath($asset->$type->indexedFolderPath);
       } else {
 	if ($verbose>1) echo "*** Adjusting indexedFolderPath in $type $path\n";
@@ -418,7 +476,7 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
     }
     if (isset($asset->$type->expirationFolderPath)) {
       if (want($asset->$type->expirationFolderPath,'folder')) {
-	checkAsset($asset->$type->expirationFolderPath,'folder');
+	checkAsset($asset->id,$asset->$type->expirationFolderPath,'folder');
 	$asset->$type->expirationFolderPath = getPath($asset->$type->expirationFolderPath);
       } else {
 	if ($verbose>1) echo "Adjusting expirationFolderPath in $type $path\n";
@@ -426,15 +484,22 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
       }
     }
     if (isset($asset->$type->formatPath)) {
-      checkAsset($asset->$type->formatPath,'format');
+      checkAsset($asset->id,$asset->$type->formatPath,'format');
       $asset->$type->formatPath = getPath($asset->$type->formatPath);
     }
     if (isset($asset->$type->targetPath)) {
-      checkTarget($asset->$type->targetPath);
+      if ($newSite) {
+	# sites don't have targets, but we may need the file extension
+	$extension["$type.$path"] = getTargetExtension($asset->$type->targetPath);
+#echo "Extension for $type $path is " . $extension["$type.$path"] . "\n";
+	unset($asset->$type->targetPath);
+      } else {
+	checkTarget($asset->$type->targetPath);
+      }
     }
     if (isset($asset->$type->structuredData) &&
         is_string($asset->$type->structuredData->definitionPath)) {
-      checkAdminAsset($asset->$type->structuredData->definitionPath,'dataDefinition');
+      checkAdminAsset($asset->$type->structuredData->definitionId,$asset->$type->structuredData->definitionPath,'dataDefinition');
     }
     if (isset($asset->$type->structuredData) &&
         isset($asset->$type->structuredData->structuredDataNodes)) {
@@ -450,28 +515,18 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
       adjustPageRegions($path,$asset->$type->pageRegions);
     }
     if (isset($asset->$type->referencedAssetId)) {
-      unset($asset->$type->referencedAssetId);
       if ($asset->$type->referencedAssetType == 'folder') {
-	  checkFolder($asset->$type->referencedAssetPath);
+	  checkFolder($asset->$type->referencedAssetId,$asset->$type->referencedAssetPath);
       } else {
-	  checkAsset($asset->$type->referencedAssetPath,
+	  checkAsset($asset->id,$asset->$type->referencedAssetPath,
 	      $asset->$type->referencedAssetType);
       }
       $asset->$type->referencedAssetPath =
 	getPath($asset->$type->referencedAssetPath);
     }
-    unset($asset->$type->id);
-    unset($asset->$type->configurationSetId);
-    unset($asset->$type->contentTypeId);
-    unset($asset->$type->formatId);
-    unset($asset->$type->expirationFolderId);
-    unset($asset->$type->indexedContentTypeId);
-    unset($asset->$type->indexedFolderId);
-    unset($asset->$type->metadataSetId);
-    unset($asset->$type->path);
-    unset($asset->$type->parentFolderId);
-    unset($asset->$type->targetId);
     setSite($asset,$type);
+    removeIds($asset->$type);
+    unset($asset->$type->path);
 
     if (isset($asset->$type->data)) {
       unset($asset->$type->text);
@@ -482,14 +537,17 @@ if ($verbose>2) echo "Checking $type: " . getPath($path) . "\n";
     if ($verbose==1) echo ".";
     if (!$dryrun) {
       $writeClient->create($asset);
-      if (!$writeClient->success) {
+      if ($writeClient->success) {
+	$newId[$ident->id] = $writeClient->createdAssetId;
+#echo "Created $type " . $newId[$ident->id] . "\n";
+	remember($ident);
+      } else {
 	echo "Failed: $type " . getPath($path) . "\n";
 	print_r($asset);
 	echo cleanup($writeClient->response);
         if ($exit_on_error) cleanexit(); else return;
       }
     }
-    remember($path,$id);
 }
 
 function checkTarget($path) {
@@ -510,53 +568,87 @@ function checkTarget($path) {
     return;
   }
 if ($verbose>2) echo "Checking $type $path ...\n";
-  $id->path = $path;
-  $id->siteName = $newSite;
-  $id->type = $type;
-  $writeClient->read($id);
+  $ident->path = $path;
+  $ident->siteName = $newSite;
+  $ident->type = $type;
+  $writeClient->read($ident);
   if (!$writeClient->success) {
-    $id->siteName = $oldSite;
-    $readClient->read($id);
+    $ident->siteName = $oldSite;
+    $readClient->read($ident);
     if (!$readClient->success) {
-      echo "Failed reading: " . $path . "\n";
+      echo "Failed reading: $type " . $path . "\n";
+      echo print_r($ident);
       echo cleanup($readClient->response);
       if ($exit_on_error) cleanexit(); else return;
     }
     $asset = $readClient->asset;
-    unset($asset->$type->id);
-    unset($asset->$type->path);
-    unset($asset->$type->parentTargetId);
-    unset($asset->$type->baseFolderId);
+
+    #
+    # save asset id to get around CSI-108
+    #
+    $ident->id = $asset->$type->id;
+
     if ($asset->$type->parentTargetPath != "") {
       checkTarget($asset->$type->parentTargetPath);
     }
     $asset->$type->baseFolderPath = getPath($asset->$type->baseFolderPath);
     if ($asset->$type->cssFilePath != "") {
-      checkAsset($asset->$type->cssFilePath,'file');
+      checkAsset($asset->$type->cssFileId,$asset->$type->cssFilePath,'file');
       $asset->$type->cssFilePath = getPath($asset->$type->cssFilePath);
     }
     if ($asset->$type->publishIntervalUnits == "Hours") {
       $asset->$type->publishIntervalUnits = "hours";
     }
     setSite($asset,$type);
+    removeIds($asset->$type);
+    unset($asset->$type->path);
     unset($asset->$type->children);
-    unset($asset->$type->cssFileId);
 
     if ($verbose>1) echo "Creating: $type " . $path . "\n";
     if (!$dryrun) {
       $writeClient->create($asset);
-      if (!$writeClient->success) {
+      if ($writeClient->success) {
+	remember($ident);
+      } else {
 	echo "\nFailed: $type " . $path . "\n";
 	print_r($asset);
 	echo cleanup($writeClient->response);
         if ($exit_on_error) cleanexit(); else return;
       }
     }
-    remember($path,$id);
   }
 }
 
-function checkFolder($path) {
+function getTargetExtension($path) {
+    global $readClient;
+    global $oldSite;
+    global $verbose;
+    global $checked;
+    global $exit_on_error;
+    global $extension;
+
+    $type = "target";
+    if (isset($extension["$type.$path"])) {
+      return($extension["$type.$path"]);
+    }
+    if ($verbose>2) echo "Checking $type $path ...\n";
+    $ident->path = $path;
+    $ident->siteName = $oldSite;
+    $ident->type = $type;
+    $readClient->read($ident);
+    if (!$readClient->success) {
+	echo "Failed reading: $type " . $path . "\n";
+	echo print_r($ident);
+	echo cleanup($readClient->response);
+	if ($exit_on_error) cleanexit(); else return;
+    }
+    $asset = $readClient->asset;
+    $extension["$type.$path"] = $asset->$type->outputExtension;
+    return($asset->$type->outputExtension);
+}
+
+
+function checkFolder($id,$path) {
   global $readClient, $writeClient;
   global $oldPath, $newPath;
   global $oldSite, $newSite;
@@ -565,6 +657,7 @@ function checkFolder($path) {
   global $verbose;
   global $checked;
   global $exit_on_error;
+  global $newId;
 
   $type = 'folder';
   if (isset($checked["$type.$path"])) {
@@ -572,32 +665,115 @@ function checkFolder($path) {
   } else {
     $checked["$type.$path"] = 1;
   }
-  if ($path == '/') {
-    return;
-  }
   if (isset($skipPattern) && preg_match("#$skipPattern#i",$path)) {
      echo "*** Skipping $type $path\n";
      return;
   }
-if ($verbose>2) echo "Checking folder " . getPath($path) . " ...\n";
-  $id->path = getPath($path);
-  $id->siteName = $newSite;
-  $id->type = strtolower($type);
-  $writeClient->read($id);
-  if (!$writeClient->success) {
-    $id->path = $path;
-    $id->siteName = $oldSite;
-    $readClient->read($id);
+#  if (!preg_match("#^$oldPath(/|$)#",$path)
+#    && !preg_match("#^$path(/|$)#",$oldPath)) {
+#    echo "*** Skipping $path\n";
+#    return;	# don't back up too far
+#  }
+
+    #
+    # read source asset
+    #
+if ($verbose>2) echo "Checking $type $path...\n";
+    if (isset($id)) {
+      $ident->id = $id;
+    }
+    $ident->path = $path;
+    $ident->siteName = $oldSite;
+    $ident->type = $type;
+    $readClient->read($ident);
     if (!$readClient->success) {
-      echo "Failed reading: " . $path . "\n";
+      echo "Failed reading: $type " . $path . "\n";
+      echo print_r($ident);
       echo cleanup($readClient->response);
       if ($exit_on_error) cleanexit(); else return;
     }
     $asset = $readClient->asset;
-    if ($asset->$type->parentFolderPath == "") {
-      $asset->$type->parentFolderPath = "/";
-    } else {
-      checkFolder($asset->$type->parentFolderPath);
+
+    #
+    # check parent folder
+    # as a side effect, will get newId for current folder
+    #
+#    if (isset($asset->$type->parentFolderPath)) {
+#      checkFolder($asset->$type->parentFolderId,$asset->$type->parentFolderPath);
+#    }
+
+    #
+    # save asset id to get around CSI-108
+    #
+    $ident->id = $asset->$type->id;
+
+    #
+    # if asset is in a different site, we're done
+    #
+#    if ($asset->$type->siteName != $oldSite) {
+#      global $host, $host2;
+#      if ($host == $host2) {
+#	  $newId[$id] = $id;
+#      }
+#      if ($verbose>2) 
+#	echo "Skipping $type $path (site " . $asset->$type->siteName . ")\n";
+#      #print_r($asset);
+#      return;
+#    }
+
+    #
+    # see if asset already exists in new location
+    # (even if we know its newID, we still need to check for children)
+    #
+    if ($verbose>3) echo "Checking new $type " . getPath($path) . " ...\n";
+    $newident->path = getPath($path);
+    $newident->siteName = $newSite;
+    $newident->type = $ident->type;
+    $writeClient->read($newident);
+
+    if ($writeClient->success) {
+      #
+      # Note any children, since we don't need to create them
+      #
+      $newasset = $writeClient->asset;
+      $newId[$asset->$type->id] = $newasset->$type->id;
+#echo "Found2 new Id for $type $path\n";
+      if (isset($newasset->$type->children)
+	  && isset($newasset->$type->children->child)) {
+	  $children = $newasset->$type->children->child;
+	  if (!is_array($children)) {
+	      $children = array( $children );
+	  }
+#echo "Folder $path in $newSite has children\n";
+	  while ($cur = array_pop($children)) {
+	      $ctype = $cur->type;
+	      $cpath = $cur->path->path;
+#echo "Child $ctype $cpath\n";
+	      if (preg_match("/block_.*/",$ctype)) {
+		  $ctype = "block";
+	      } else if (preg_match("/format_.*/",$ctype)) {
+		  $ctype = "format";
+	      }
+	      if ($ctype != 'folder') {
+		  $checked["$ctype.$cpath"] = 1;
+	      }
+	      $newId["$ctype.$cpath"] = $cur->id;
+#echo "Saving new Id " . $cur->id . " for $ctype $cpath\n";
+	      #if ($verbose > 2) echo "Ok: $ctype $cpath\n";
+	  }
+      }
+      return;
+    }
+
+    #
+    # we need to create it
+    #
+
+#    if ($asset->$type->parentFolderPath == "") {
+#      $asset->$type->parentFolderPath = "/";
+#    } else {
+    if (isset($asset->$type->parentFolderPath)) {
+      checkFolder($asset->$type->parentFolderId,$asset->$type->parentFolderPath);
     }
     #
     # if this is the main folder we're copying, we may need to rename it
@@ -611,36 +787,36 @@ if ($verbose>2) echo "Checking folder " . getPath($path) . " ...\n";
     }
     $asset->$type->parentFolderPath = getPath($asset->$type->parentFolderPath);
 
-    checkAdminAsset($asset->$type->metadataSetPath,'metaDataSet');
-    unset($asset->$type->id);
-    unset($asset->$type->children);
-    unset($asset->$type->path);
-    unset($asset->$type->parentFolderId);
-    unset($asset->$type->metadataSetId);
-    unset($asset->$type->expirationFolderId);
+    checkAdminAsset($asset->$type->metadataSetId,$asset->$type->metadataSetPath,'metadataSet');
     setSite($asset,$type);
+    removeIds($asset->$type);
+    unset($asset->$type->path);
+    unset($asset->$type->children);
 
     if ($verbose) echo "Creating: $type " . getPath($path) . "\n";
     if (!$dryrun) {
       $writeClient->create($asset);
-      if (!$writeClient->success) {
+      if ($writeClient->success) {
+	$newId[$ident->id] = $writeClient->createdAssetId;
+#echo "Created $type " . $newId[$ident->id] . "\n";
+	remember($ident);
+      } else {
 	echo "\nFailed: $type " . getPath($path) . "\n";
 	print_r($asset);
 	echo cleanup($writeClient->response);
         if ($exit_on_error) cleanexit(); else return;
       }
     }
-    remember($path,$id);
-  }
 }
 
-function checkAdminAsset($path,$type) {
+function checkAdminAsset($id,$path,$type) {
   global $readClient, $writeClient;
   global $oldSite, $newSite;
   global $dryrun;
   global $verbose;
   global $checked;
   global $exit_on_error;
+  global $newId;
 
   if (isset($checked["$type.$path"])) {
     return;
@@ -657,14 +833,13 @@ function checkAdminAsset($path,$type) {
       if ($verbose>2) echo "Ok: $type $path\n";
       return;
     } else {
-      preg_match('/^(.*):(.*)/',$path,$matches);
       $site = $matches[1];
       $path = $matches[2];
       if ($verbose>2) echo "Checking $type $site:$path\n";
-      $id->path = $path;
-      $id->siteName = $site;
-      $id->type = strtolower($type);
-      $writeClient->read($id);
+      $newident->path = $path;
+      $newident->siteName = $site;
+      $newident->type = strtolower($type);
+      $writeClient->read($newident);
       if (!$writeClient->success) {
 	  if (preg_match('/Unable to identify an entity/',$writeClient->response)) {
 	      echo "
@@ -672,8 +847,8 @@ function checkAdminAsset($path,$type) {
 in target environment.  You must change this before the copy can proceed.
 ";
 	  } else {
-	      echo "Failed reading: " . $site . ' ' . $path . "\n";
-	      echo print_r($id);
+	      echo "Failed reading: " . $site . ': ' . $path . "\n";
+	      echo print_r($newident);
 	      echo cleanup($writeClient->response);
 	  }
 	  if ($exit_on_error) cleanexit(); else return;
@@ -682,21 +857,31 @@ in target environment.  You must change this before the copy can proceed.
     }
   }
 
-if ($verbose>2) echo "Checking $type $path\n";
-  $id->path = $path;
-  $id->siteName = $newSite;
-  $id->type = strtolower($type);
-  $writeClient->read($id);
-  if (!$writeClient->success) {
-    $id->siteName = $oldSite;
-    $readClient->read($id);
+    #
+    # read source asset
+    #
+    if ($verbose>2) echo "Checking $type $path\n";
+    if (isset($id)) {
+      $ident->id = $id;
+    }
+    $ident->path = $path;
+    $ident->siteName = $oldSite;
+    $ident->type = strtolower($type);
+    $readClient->read($ident);
     if (!$readClient->success) {
-      echo "Failed reading: " . $path . "\n";
-      echo cleanup($readClient->response);
+      echo "Read failure on $type $path: " . cleanup($readClient->response);
+      echo print_r($ident);
       if ($exit_on_error) cleanexit(); else return;
     }
     $asset = $readClient->asset;
+
+    $otype = $type;
     $container = $type.'Container';
+    if ($type == 'destination') {
+	$container = 'siteDestinationContainer';
+    } else if (preg_match('/Connector$/', $type)) {
+	$container = 'connectorContainer';
+    }
     if (!isset($asset->$type)) {
       if (isset($asset->fileSystemTransport)) {
 	$type = "fileSystemTransport";
@@ -704,8 +889,6 @@ if ($verbose>2) echo "Checking $type $path\n";
       } else if (isset($asset->ftpTransport)) {
 	$type = "ftpTransport";
 	$container = "transportContainer";
-	echo "*** Can't set password on $type: $path\n";
-	$asset->$type->password = 'UNKNOWN';
       } else if (isset($asset->databaseTransport)) {
 	$type = "databaseTransport";
 	$container = "transportContainer";
@@ -715,35 +898,94 @@ if ($verbose>2) echo "Checking $type $path\n";
       }
     }
 
-    unset($asset->$type->id);
-    unset($asset->$type->path);
-    unset($asset->$type->parentContainerId);
+
+    #
+    # if asset is in a different site, we're done
+    #
+#    if ($asset->$type->siteName != $oldSite) {
+#      global $host, $host2;
+#      if ($host == $host2) {
+#	  $newId[$id] = $id;
+#      }
+#      if ($verbose>2) 
+#	echo "Skipping $type $path (site " . $asset->$type->siteName . ")\n";
+#      #print_r($asset);
+#      return;
+#    }
+
+    #
+    # save asset id to get around CSI-108
+    #
+    $ident->id = $asset->$type->id;
+
+    #
+    # see if asset already exists in new location
+    #
+    $parent = preg_replace("#/[^/]*$#", "", $path);
+    if (isset($checked["$container.$parent"])) {
+	# we know it doesn't exist
+	#echo "Not checking $type: $path\n";
+    } else if (isset($newId["$otype.$path"])) {
+	# we know it does exist
+	$newId[$asset->$type->id] = $newId["$otype.$path"];
+#echo "Found new Id for $type $path\n";
+	return;
+    } else {
+      if ($verbose>3) echo "Checking new $type $path\n";
+      $newident->path = $path;
+      $newident->siteName = $newSite;
+      $newident->type = $ident->type;
+      $writeClient->read($newident);
+      if ($writeClient->success) {
+	$newasset = $writeClient->asset;
+	$newId[$asset->$type->id] = $newasset->$type->id;
+#echo "Found2 new Id for $type $path\n";
+	  return;
+      } else if (preg_match('/Unable to identify/',$writeClient->response)) {
+	#echo "Can't find " . $ident->path . " in $newSite\n";
+      } else {
+	echo "Read failure on destination: " . getPath($path) . cleanup($writeClient->response);
+	print_r($newident);
+	if ($exit_on_error) cleanexit(); else return;
+      }
+    }
+
+    if (isset($asset->fileSystemTransport)) {
+      if (!$asset->$type->directory) {
+	  echo "*** Skipping $type $path: directory is required\n";
+	  return;
+      }
+    } else if (isset($asset->ftpTransport)) {
+      echo "*** Can't set password on $type: $path\n";
+      $asset->$type->password = 'UNKNOWN';
+    } else if (isset($asset->databaseTransport)) {
+      // Cascade 6.7.3 WS can't create database transport with siteId=0
+      //$asset->$type->transportSiteId = 1;
+    }
+
     if (isset($asset->$type->parentContainerPath)) {
-	if ($type == 'destination') {
+	if ($type == 'destination' && $oldSite = '') {
 	    checkTarget($asset->$type->parentContainerPath);
 	} else {
-	    checkContainer($asset->$type->parentContainerPath,$container);
+	    checkContainer($asset->$type->parentContainerId,$asset->$type->parentContainerPath,$container);
 	}
     }
-    setSite($asset,$type);
 
     if ($type == 'assetFactory') {
-	unset($asset->$type->baseAssetId);
-	unset($asset->$type->placementFolderId);
-	unset($asset->$type->workflowDefinitionId);
 	if ($asset->$type->assetType == 'format') {
-	  echo "*** Skipping asset factory of type 'format': " . $path . "\n";
-	  return;
+	    # see http://issues.hannonhill.com/browse/CSI-222
+	    echo "*** Skipping asset factory of type 'format': " . $path . "\n";
+	    return;
 	}
 	if (isset($asset->$type->assetType) && isset($asset->$type->baseAssetPath)) {
 	    if ($asset->$type->assetType == 'folder') {
-		checkFolder($asset->$type->baseAssetPath);
+		checkFolder($asset->$type->baseAssetId,$asset->$type->baseAssetPath);
 	    } else {
-		checkAsset($asset->$type->baseAssetPath,$asset->$type->assetType);
+		checkAsset($asset->id,$asset->$type->baseAssetPath,$asset->$type->assetType);
 	    }
 	}
 	if (isset($asset->$type->placementFolderPath)) {
-	    checkFolder($asset->$type->placementFolderPath);
+	    checkFolder($asset->$type->placementFolderId,$asset->$type->placementFolderPath);
 	}
 	# as per CSCD-4324 asset factory's with multiple applicable groups do not persist
 	if (isset($asset->$type->applicableGroups)) {
@@ -751,147 +993,219 @@ if ($verbose>2) echo "Checking $type $path\n";
 		preg_replace("/,/", ";", $asset->$type->applicableGroups);
 	}
 	if (isset($asset->$type->workflowDefinitionPath)) {
-	    checkAdminAsset($asset->$type->workflowDefinitionPath,'workflowDefinition');
+	    checkAdminAsset($asset->$type->workflowDefinitionId,$asset->$type->workflowDefinitionPath,'workflowDefinition');
 	}
-
-    } else if ($type == 'destination') {
-	unset($asset->$type->transportId);
-	# it's too hard to create destinations, so ...
-	echo "*** Skipping destination $path\n";
-	return;
 
     } else if ($type == 'pageConfigurationSet') {
       if (isset($asset->$type->pageConfigurations)) {
 	adjustPageConfigurations($path,$asset->$type->pageConfigurations);
       }
+      if ($oldSite == '' && $newSite != '') {
+        #echo "*** Please set Output File Extension in $type $path\n";
+      }
 
     } else if ($type == 'publishSet') {
-	foreach (array('pages','files','folders') as $thing) {
-	    $area = $asset->$type->$thing;
+	foreach (array('pages','files','folders') as $pstype) {
+	    $area = $asset->$type->$pstype;
 	    if (isset($area->publishableAssetIdentifier) &&
-		is_array($area->publishableAssetIdentifier)) {
-		#echo "*** Removing Ids from $thing in $path\n";
-		removeIds($area->publishableAssetIdentifier);
+		isset($area->publishableAssetIdentifier)) {
+		$children = $area->publishableAssetIdentifier;
+		if (!is_array($children)) {
+		    $children = array( $children );
+		}
+		#echo "*** Removing Ids from $pstype in $path\n";
+		foreach ($children as &$item) {
+		    unset($item->id);
+		}
 	    }
 	}
 
     } else if ($type == 'contentType') {
-      unset($asset->$type->metadataSetId);
-      unset($asset->$type->pageConfigurationSetId);
-      unset($asset->$type->dataDefinitionId);
       if (isset($asset->$type->metadataSetPath)) {
-	  checkAdminAsset($asset->$type->metadataSetPath,'metaDataSet');
+	  checkAdminAsset($asset->$type->metadataSetId,$asset->$type->metadataSetPath,'metadataSet');
       }
       if (isset($asset->$type->pageConfigurationSetPath)) {
-	  checkAdminAsset($asset->$type->pageConfigurationSetPath,'pageConfigurationSet');
+	  checkAdminAsset($asset->$type->pageConfigurationSetId,$asset->$type->pageConfigurationSetPath,'pageConfigurationSet');
       }
       if (isset($asset->$type->dataDefinitionPath)) {
-	  checkAdminAsset($asset->$type->dataDefinitionPath,'dataDefinition');
+	  checkAdminAsset($asset->$type->dataDefinitionId,$asset->$type->dataDefinitionPath,'dataDefinition');
       }
     }
-    //print_r($asset);
+    setSite($asset,$type);
+    removeIds($asset->$type);
+    unset($asset->$type->path);
 
 
     if ($verbose>1) echo "Creating: $type " . $path . "\n";
+    if ($verbose==1) echo ".";
     if (!$dryrun) {
       $writeClient->create($asset);
-      if (!$writeClient->success) {
+      if ($writeClient->success) {
+	$newId[$ident->id] = $writeClient->createdAssetId;
+#echo "Created $type " . $newId[$ident->id] . "\n";
+	remember($ident);
+      } else {
 	echo "\nFailed: $type " . $path . "\n";
 	print_r($asset);
 	echo cleanup($writeClient->response);
         if ($exit_on_error) cleanexit(); else return;
       }
     }
-    remember($path,$id);
-  }
 }
 
 
-function checkContainer($path,$type) {
-  global $readClient, $writeClient;
-  global $oldSite, $newSite;
-  global $dryrun;
-  global $verbose;
-  global $checked;
-  global $exit_on_error;
+function checkContainer($id,$path,$type) {
+    global $readClient, $writeClient;
+    global $oldSite, $newSite;
+    global $dryrun;
+    global $verbose;
+    global $checked;
+    global $exit_on_error;
+    global $newId;
 
-  if (isset($checked["$type.$path"])) {
-    return;
-  } else {
-    $checked["$type.$path"] = 1;
-  }
-  if (!isset($path)) {
-    return;
-  }
-if ($verbose>2) echo "Checking $type $path ...\n";
-  $id->path = $path;
-  $id->siteName = $newSite;
-  $id->type = strtolower($type);
-  $writeClient->read($id);
-  if (!$writeClient->success) {
-    $id->siteName = $oldSite;
-    $readClient->read($id);
+    if (isset($checked["$type.$path"])) {
+      return;
+    } else {
+      $checked["$type.$path"] = 1;
+    }
+
+    #
+    # read source asset
+    #
+    if ($verbose>2) echo "Checking $type $path...\n";
+    if (isset($id)) {
+      $ident->id = $id;
+    }
+    $ident->path = $path;
+    $ident->siteName = $oldSite;
+    $ident->type = strtolower($type);
+    $readClient->read($ident);
     if (!$readClient->success) {
-      echo "Failed reading: " . $path . "\n";
+      echo "Failed reading: $type " . $path . "\n";
+      echo print_r($ident);
       echo cleanup($readClient->response);
       if ($exit_on_error) cleanexit(); else return;
     }
     $asset = $readClient->asset;
-    unset($asset->$type->id);
-    unset($asset->$type->path);
-    unset($asset->$type->parentContainerId);
-    unset($asset->$type->children);
+
+    #
+    # save asset id to get around CSI-108
+    #
+    $ident->id = $asset->$type->id;
+
+    #
+    # see if asset already exists in new location
+    # (even if we know its newID, we still need to check for children)
+    #
+    if ($verbose>3) echo "Checking new $type $path ...\n";
+    $newident->path = $path;
+    $newident->siteName = $newSite;
+    $newident->type = $ident->type;
+    $writeClient->read($newident);
+
+    if ($writeClient->success) {
+      #
+      # Note any children, since we don't need to create them
+      #
+      $newasset = $writeClient->asset;
+      $newId[$asset->$type->id] = $newasset->$type->id;
+      if (isset($newasset->$type->children)
+	  && isset($newasset->$type->children->child)) {
+	  $children = $newasset->$type->children->child;
+	  if (!is_array($children)) {
+	      $children = array( $children );
+	  }
+	  while ($cur = array_pop($children)) {
+	      $ctype = $cur->type;
+	      $cpath = $cur->path->path;
+	      if ($ctype == 'assetfactory') $ctype = 'assetFactory';
+	      if ($ctype == 'contenttype') $ctype = 'contentType';
+	      if ($ctype == 'metadataset') $ctype = 'metadataSet';
+	      if ($ctype == 'pageconfigurationset') $ctype = 'pageConfigurationSet';
+	      if ($ctype == 'publishset') $ctype = 'publishSet';
+	      if ($ctype == 'workflowdefinition') $ctype = 'workflowDefinition';
+	      if ($ctype == 'datadefinition') $ctype = 'dataDefinition';
+	      if (preg_match("/transport_.*/",$ctype)) {
+		  $ctype = "transport";
+	      }
+	      if (!preg_match('/container$/',$ctype)) {
+		$checked["$ctype.$cpath"] = 1;
+	      }
+	      $newId["$ctype.$cpath"] = $cur->id;
+	      #if ($verbose > 2) echo "Ok: $ctype $cpath\n";
+	  }
+      }
+      return;
+    }
+
     if (isset($asset->$type->parentContainerPath)) {
-      checkContainer($asset->$type->parentContainerPath,$type);
+      checkContainer($asset->$type->parentContainerId,$asset->$type->parentContainerPath,$type);
     }
     setSite($asset,$type);
+    removeIds($asset->$type);
+    unset($asset->$type->path);
+    unset($asset->$type->children);
 
     if ($verbose) echo "Creating: $type " . $path . "\n";
     if (!$dryrun) {
       $writeClient->create($asset);
-      if (!$writeClient->success) {
+      if ($writeClient->success) {
+	$newId[$ident->id] = $writeClient->createdAssetId;
+#echo "Created $type " . $newId[$ident->id] . "\n";
+	remember($ident);
+      } else {
 	echo "\nFailed: $type " . $path . "\n";
 	print_r($asset);
 	echo cleanup($writeClient->response);
         if ($exit_on_error) cleanexit(); else return;
       }
     }
-    remember($path,$id);
-  }
 }
 
 /*
  * Copy a container and its contents
  */
-function add_container($path,$type) {
+function add_container($id,$path,$type) {
     global $oldPath;
     global $oldSite, $newSite;
     global $readClient, $writeClient;
-    global $checked;
+    global $added;
+    global $verbose;
     global $exit_on_error;
 
-    if (isset($checked["$type.$path"])) {
+    #
+    # have we already checked container *and* children?
+    #
+    if (isset($added["$type.$group"])) {
       return;
+    } else {
+      $added["$type.$path"] = 1;
     }
 
+#if ($verbose>2) echo "Adding $type $path...\n";
     #
     # create the container
     #
     if ($type == 'target') {
 	checkTarget($path);
     } else {
-	checkContainer($path,$type);
+	checkContainer($id,$path,$type);
     }
 
+
     #
-    # and all its children
+    # and its children
     #
-    $id->path = $path;
-    $id->siteName = $oldSite;
-    $id->type = strtolower($type);
-    $readClient->read($id);
+    if (isset($id)) {
+	$ident->id = $id;
+    }
+    $ident->path = $path;
+    $ident->siteName = $oldSite;
+    $ident->type = strtolower($type);
+    $readClient->read($ident);
     if (!$readClient->success) {
-	echo "Failed reading: " . $path . "\n";
+	echo "Failed reading: $type " . $path . "\n";
+	echo print_r($ident);
 	echo cleanup($readClient->response);
         if ($exit_on_error) cleanexit(); else return;
     }
@@ -905,6 +1219,9 @@ function add_container($path,$type) {
     } else {
 	$children = "";
     }
+    #
+    # types of things we find in containers
+    #
     $types = array(
 	"assetFactoryContainer",
 	"pageConfigurationSetContainer",
@@ -919,26 +1236,33 @@ function add_container($path,$type) {
 	"pageConfigurationSet",
 	"contentType",
 	"dataDefinition",
-	"metaDataSet",
+	"metadataSet",
 	"publishSet",
 	"destination",
 	"target",
 	"transport",
 	"workflowDefinition",
+	"connectorContainer",
+	"twitterConnector",
+	"wordPressConnector",
+	"googleAnalyticsConnector",
     );
+    $names['transport_db'] = 'transport';
+    $names['transport_fs'] = 'transport';
+    $names['transport_ftp'] = 'transport';
     foreach ($types as $type) {
 	$names[strtolower($type)] = $type;
     }
     if (is_array($children)) {
 	while ($cur = array_pop($children)) {
 	    if (array_key_exists($cur->type,$names)) {
-		if (preg_match('/container/',$cur->type)) {
-		    add_container($cur->path->path, $names[$cur->type]);
+		if (preg_match('/container$/',$cur->type)) {
+		    add_container($cur->id, $cur->path->path, $names[$cur->type]);
 		} else if ($cur->type == 'target') {
 		    checkTarget($cur->path->path);
-		    add_container($cur->path->path, $names[$cur->type]);
+		    add_container($cur->id, $cur->path->path, $names[$cur->type]);
 		} else {
-		    checkAdminAsset($cur->path->path, $names[$cur->type]);
+		    checkAdminAsset($cur->id, $cur->path->path, $names[$cur->type]);
 		}
 	    } else {
 		echo "Oops: don't know what to do with "
@@ -987,13 +1311,13 @@ function want($path,$type) {
     } else {
 	# we only want it if it already exists
 	if ($type == 'group' || $type == 'user') {
-	    $id->id = getName($path);
+	    $ident->id = getName($path);
 	} else {
-	    $id->path = getPath($path);
+	    $ident->path = getPath($path);
 	}
-	$id->type = strtolower($type);
-	$id->siteName = $newSite;
-	$writeClient->read($id);
+	$ident->type = strtolower($type);
+	$ident->siteName = $newSite;
+	$writeClient->read($ident);
 	if ($writeClient->success) {
 	    $want["$type.$path"] = true;
 	    return(true);
@@ -1020,12 +1344,12 @@ function checkGroup($group) {
     $checked["$type.$group"] = 1;
   }
 if ($verbose>2) echo "Checking $type " . getName($group) . "...\n";
-  $id->id = getName($group);
-  $id->type = strtolower($type);
-  $writeClient->read($id);
+  $ident->id = getName($group);
+  $ident->type = strtolower($type);
+  $writeClient->read($ident);
   if (!$writeClient->success) {
-    $id->id = $group;
-    $readClient->read($id);
+    $ident->id = $group;
+    $readClient->read($ident);
     if (!$readClient->success) {
       echo "Failed reading: " . $group . "\n";
       echo cleanup($readClient->response);
@@ -1042,9 +1366,9 @@ if ($verbose>2) echo "Checking $type " . getName($group) . "...\n";
       $users = preg_split('/;/',$asset->$type->users);
       $newusers = array();
       foreach ($users as &$user) {
-	$id->id = $user;
-	$id->type = 'user';
-	$writeClient->read($id);
+	$ident->id = $user;
+	$ident->type = 'user';
+	$writeClient->read($ident);
 	if ($writeClient->success) {
 	  array_push($newusers,$user);
 	} else {
@@ -1054,18 +1378,16 @@ if ($verbose>2) echo "Checking $type " . getName($group) . "...\n";
       $asset->$type->users = join(';',$newusers);
     }
 
-    unset($asset->$type->groupAssetFactoryContainerId);
-    unset($asset->$type->groupBaseFolderId);
-    unset($asset->$type->groupStartingPageId);
+    removeIds($asset->$type);
     if (want($asset->$type->groupAssetFactoryContainerPath,'assetFactoryContainer')) {
-	checkContainer($asset->$type->groupAssetFactoryContainerPath,'assetFactoryContainer');
+	checkContainer($asset->$type->groupAssetFactoryContainerId,$asset->$type->groupAssetFactoryContainerPath,'assetFactoryContainer');
     } else {
 	if ($verbose>1) echo "*** Adjusting groupAssetFactoryContainerPath in $type $group\n";
 	$asset->$type->groupAssetFactoryContainerPath = null;
     }
     if (isset($asset->$type->groupStartingPagePath)) {
 	if (want($asset->$type->groupStartingPagePath,'page')) {
-	    checkAsset($asset->$type->groupStartingPagePath,'page');
+	    checkAsset($asset->id,$asset->$type->groupStartingPagePath,'page');
 	    $asset->$type->groupStartingPagePath =
 	      getPath($asset->$type->groupStartingPagePath);
 	} else {
@@ -1075,7 +1397,7 @@ if ($verbose>2) echo "Checking $type " . getName($group) . "...\n";
     }
     if (isset($asset->$type->groupBaseFolderPath)) {
 	if (want($asset->$type->groupBaseFolderPath,'folder')) {
-	    checkFolder($asset->$type->groupBaseFolderPath);
+	    checkFolder($asset->$type->$groupBaseFolderId,$asset->$type->groupBaseFolderPath);
 	    $asset->$type->groupBaseFolderPath =
 	      getPath($asset->$type->groupBaseFolderPath);
 	} else {
@@ -1115,12 +1437,12 @@ function checkUser($user) {
     $checked["$type.$user"] = 1;
   }
 if ($verbose>2) echo "Checking $type " . getName($user) . "...\n";
-  $id->id = getName($user);
-  $id->type = strtolower($type);
-  $writeClient->read($id);
+  $ident->id = getName($user);
+  $ident->type = strtolower($type);
+  $writeClient->read($ident);
   if (!$writeClient->success) {
-    $id->id = $user;
-    $readClient->read($id);
+    $ident->id = $user;
+    $readClient->read($ident);
     if (!$readClient->success) {
       echo "Failed reading: " . $user . "\n";
       echo cleanup($readClient->response);
@@ -1192,6 +1514,7 @@ function getPath($folderPath) {
 function getName($name) {
     global $oldPath;
     global $newPath;
+    global $newId;
     $oldName = preg_replace(",^.*/,", "", $oldPath);
     $newName = preg_replace(",^.*/,", "", $newPath);
     if (preg_match("/^$oldName/", $name)) {
@@ -1200,13 +1523,50 @@ function getName($name) {
     return $name;
 }
 
-function removeIds($array) {
-    foreach ($array as &$item) {
-	unset($item->id);
+function removeIds($item) {
+    global $newId;
+
+    foreach ($item as $var => $value) {
+	if ($var == 'id' || $var == 'siteId') {
+	    unset($item->$var);
+	} else if ($var == 'transportSiteId') {
+	    # it's ok
+	} else if (preg_match("/^(.*)Id$/",$var,$matches)) {
+	    if (!isset($value)) {
+		unset($item->$var);
+	    } else if (isset($newId[$value])) {
+		$item->$var = $newId[$value];
+#echo "** Changing $var from $value to " . $newId[$value] . "\n";
+	    } else {
+		$type = $matches[1];
+		$pvar = $type . 'Path';
+		$path = $item->$pvar;
+		if ($type == 'baseAsset') {
+		    $type = $item->assetType;
+		}
+		$type = strtolower($type);
+#echo "** Looking for newId for $type "
+#. " ($var " . $item->$var . ") "
+#. " ($pvar " . $item->$pvar . ")"
+#. "\n";
+		if (isset($path) && isset($newId["$type.$path"])) {
+		    $item->$var = $newId["$type.$path"];
+#echo "** Changing $var from $value to " . $newId["$type.$path"] . "\n";
+		} else {
+		    if (isset($item->$var)) {
+			unset($item->$var);
+#echo "** Clearing $var $value\n";
+		    }
+		}
+	    }
+	}
     }
 }
 
 function adjustPageConfigurations($path,$pageConfigurations) {
+    global $oldSite, $newSite;
+    global $extension;
+
     if (isset($pageConfigurations) &&
 	isset($pageConfigurations->pageConfiguration)) {
       $configs = $pageConfigurations->pageConfiguration;
@@ -1214,21 +1574,40 @@ function adjustPageConfigurations($path,$pageConfigurations) {
 	$configs = array( $configs );
       }
       foreach ($configs as &$config) {
-	unset($config->id);
-	unset($config->templateId);
-	unset($config->formatId);
+	#unset($config->id);
+	#unset($config->templateId);
+	#unset($config->formatId);
+
+	if (isset($config->formatPath)) {
+	    # remove old site name so copy will use new one
+	    $config->formatPath = preg_replace("/^$oldSite:/", '', $config->formatPath);
+	}
 	if (isset($config->templatePath)) {
-	    checkAsset($config->templatePath,'template');
+	    $config->templatePath = preg_replace("/^$oldSite:/", '', $config->templatePath);
+	    checkAsset($config->templateId,$config->templatePath,'template');
 	    $config->templatePath = getPath($config->templatePath);
 	}
 	if (isset($config->pageRegions)) {
 	    adjustPageRegions($path,$config->pageRegions);
 	}
+	if ($oldSite == '' && $newSite != ''
+	    && !isset($config->outputExtension)) {
+	    if (isset($extension["template." . $config->templatePath])) {
+	      $config->outputExtension =
+		$extension["template." . $config->templatePath];
+#echo "Set Extension for config " . $config->name . " to " . $config->outputExtension . "\n";
+	    } else {
+		echo "*** Warning: Please set Output File Extension in configuration set $path, configuration " . $config->name . "\n";
+	    }
+	}
+	removeIds($config);
       }
     }
 }
 
 function adjustPageRegions($path,$pageRegions) {
+    global $oldSite;
+
     if (!isset($pageRegions)) {
       return;
     }
@@ -1239,21 +1618,29 @@ function adjustPageRegions($path,$pageRegions) {
 	$regions = array( $regions );
       }
       foreach ($regions as &$region) {
-	unset($region->id);
-	unset($region->blockId);
-	unset($region->formatId);
+	#unset($region->id);
+	#unset($region->blockId);
+	#unset($region->formatId);
+
 	if (!$region->blockPath) unset($region->blockPath);
 	if (!$region->noBlock) unset($region->noBlock);
 	if (!$region->formatPath) unset($region->formatPath);
 	if (!$region->noFormat) unset($region->noFormat);
+
 	if (isset($region->blockPath)) {
-	  checkAsset($region->blockPath,"block");
-	  $region->blockPath = getPath($region->blockPath);
+	    $region->blockPath = preg_replace("/^$oldSite:/", '', $region->blockPath);
+	    checkAsset($region->blockId,$region->blockPath,"block");
+	    $region->blockPath = getPath($region->blockPath);
+	}
+	if (isset($region->templatePath)) {
+	    $region->templatePath = preg_replace("/^$oldSite:/", '', $region->templatePath);
 	}
 	if (isset($region->formatPath)) {
-	  checkAsset($region->formatPath,"format");
-	  $region->formatPath = getPath($region->formatPath);
+	    $region->formatPath = preg_replace("/^$oldSite:/", '', $region->formatPath);
+	    checkAsset($region->formatId,$region->formatPath,"format");
+	    $region->formatPath = getPath($region->formatPath);
 	}
+	removeIds($region);
       }
     }
 }
@@ -1269,33 +1656,43 @@ function adjustStructuredData($path,$structuredDataNodes) {
 	  $nodes = array( $nodes );
       }
       foreach ($nodes as &$node) {
-	unset($node->blockId);
-	unset($node->fileId);
-	unset($node->pageId);
-	unset($node->symlinkId);
-	if ($node->type != 'asset') {
-	    unset($node->assetType);
-	} else {
+	#unset($node->blockId);
+	#unset($node->fileId);
+	#unset($node->pageId);
+	#unset($node->symlinkId);
+	removeIds($node);
+
+	if ($node->type == 'asset') {
 	    if ($node->assetType != 'block') unset($node->blockPath);
 	    if ($node->assetType != 'file') unset($node->filePath);
 	    if ($node->assetType != 'page') unset($node->pagePath);
 	    if ($node->assetType != 'symlink') unset($node->symlinkPath);
-	    if ($node->assetType != 'text') unset($node->text);
+	    unset($node->text);
+	} else {
+	    unset($node->assetType);
+	    unset($node->blockPath);
+	    unset($node->filePath);
+	    unset($node->pagePath);
+	    unset($node->symlinkPath);
 	}
 	if (isset($node->blockPath)) {
-	    checkAsset($node->blockPath,'block');
+	    if (isset($newId["block." . $blockPath])) {
+#echo "Found new Id for block " . $node->blockPath . "in $path\n";
+	      $node->blockId = $newId["block." . $blockPath];
+	    }
+	    checkAsset($node->blockId,$node->blockPath,'block');
 	    $node->blockPath = getPath($node->blockPath);
 	}
 	if (isset($node->filePath)) {
-	    checkAsset($node->filePath,'file');
+	    checkAsset($node->fileId,$node->filePath,'file');
 	    $node->filePath = getPath($node->filePath);
 	}
 	if (isset($node->pagePath)) {
-	    checkAsset($node->pagePath,'page');
+	    checkAsset($node->pageId,$node->pagePath,'page');
 	    $node->pagePath = getPath($node->pagePath);
 	}
 	if (isset($node->symlinkPath)) {
-	    checkAsset($node->symlinkPath,'symlink');
+	    checkAsset($node->symlinkId,$node->symlinkPath,'symlink');
 	    $node->symlinkPath = getPath($node->symlinkPath);
 	}
 	if ($node->type == 'group') {
@@ -1325,63 +1722,77 @@ function adjustStructuredData($path,$structuredDataNodes) {
 #
 # remember things we've created so we can set permissions later
 #
-function remember($path,$id) {
+function remember($ident) {
     global $created;
-    $created[] = $path;
-    $created[] = $id;
+    $created[] = $ident;
 }
 
 function setPermissions() {
     global $created;
     global $verbose;
     if (is_array($created)) {
-	if ($verbose == 1)
-	    echo "Setting access rights ...\n";
-	while ($path = array_shift($created)) {
-	    $id = array_shift($created);
-	    setAccessRights($path,$id);
+	if ($verbose > 1)
+	    echo "\nSetting access rights ...\n";
+
+	while ($ident = array_shift($created)) {
+	    setAccessRights($ident);
 	}
     }
 }
 
-function setAccessRights($path,$id) {
+function setAccessRights($ident) {
     global $readClient, $writeClient;
     global $dryrun;
     global $verbose;
 
-    $readClient->readAccessRights($id);
+    $readClient->readAccessRights($ident);
     if ($readClient->success) {
-        $accessRightsInformation = $readClient->response->readAccessRightsReturn->accessRightsInformation;
-        $accessRightsInformation = adjustAccessRights($accessRightsInformation);
-	if ($verbose > 1)
-	    echo "Setting access rights on " . $id->type . " " . getPath($path) . "\n";
+        $accessRights = $readClient->response->readAccessRightsReturn->accessRightsInformation;
+        $accessRights = adjustAccessRights($accessRights);
+	if ($verbose > 2)
+	    echo "Setting access rights on " . $ident->type . " " . getPath($ident->path) . "\n";
 	if (!$dryrun) {
-	  $writeClient->editAccessRights($accessRightsInformation, false);
+	  $writeClient->editAccessRights($accessRights, false);
 	  if (!$writeClient->success) {
-	    echo "\nFailed set access rights: " . $id->type . " " . getPath($path) . "\n";
+	    echo "\nFailed to set access rights: " . $ident->type . " " . getPath($ident->path) . "\n";
+	    print_r($accessRights);
 	    echo cleanup($writeClient->response);
 	    if ($exit_on_error) cleanexit(); else return;
 	  }
 	}
+    } else {
+	    echo "\nFailed to read access rights: " . $ident->type . " " . getPath($ident->path) . "\n";
+	    print_r($ident);
+	    echo cleanup($readClient->response);
     }
 }
 
-function adjustAccessRights($accessRightsInformation) {
+function adjustAccessRights($accessRights) {
     global $newSite;
 
-    $accessRightsInformation->identifier->path->path =
-	getPath($accessRightsInformation->identifier->path->path);
-    if ($newSite == 'Global') {
-	$accessRightsInformation->identifier->path->siteName = "";
+    $accessRights->identifier->path->path =
+	getPath($accessRights->identifier->path->path);
+    if ($newSite == '') {
+	$accessRights->identifier->path->siteName = "";
     } else {
-	$accessRightsInformation->identifier->path->siteName = $newSite;
+	$accessRights->identifier->path->siteName = $newSite;
     }
-    unset($accessRightsInformation->identifier->path->siteId);
-    unset($accessRightsInformation->identifier->id);
+    unset($accessRights->identifier->path->siteId);
+    unset($accessRights->identifier->id);
 
-    if (isset($accessRightsInformation->aclEntries) &&
-	isset($accessRightsInformation->aclEntries->aclEntry)) {
-	$nodes = $accessRightsInformation->aclEntries->aclEntry;
+    #
+    # See http://issues.hannonhill.com/browse/CSI-219
+    #
+    if ($accessRights->identifier->type == 'structureddatadefinition') {
+	$accessRights->identifier->type = 'datadefinition';
+    }
+    if ($accessRights->identifier->type == 'structureddatadefinitioncontainer') {
+	$accessRights->identifier->type = 'datadefinitioncontainer';
+    }
+
+    if (isset($accessRights->aclEntries) &&
+	isset($accessRights->aclEntries->aclEntry)) {
+	$nodes = $accessRights->aclEntries->aclEntry;
 	if (!is_array($nodes)) {
 	    $nodes = array( $nodes );
 	}
@@ -1398,20 +1809,19 @@ function adjustAccessRights($accessRightsInformation) {
 		array_push($newnodes,$node);
 	    }
 	}
-	$accessRightsInformation->aclEntries->aclEntry = $newnodes;
+	$accessRights->aclEntries->aclEntry = $newnodes;
     }
-    return $accessRightsInformation;
+    return $accessRights;
 }
 
 function setSite($asset,$type) {
     global $oldSite, $newSite;
 
-    if ($newSite == 'Global') {
+    if ($newSite == '') {
 	  unset($asset->$type->siteName);
     } else {
 	  $asset->$type->siteName = $newSite;
     }
-    unset($asset->$type->siteId);
 }
 
 
@@ -1518,16 +1928,16 @@ function showForm() {
 	'block', 'file', 'page', 'reference', 'format', 'symlink', 'template',
 	'assetFactoryContainer', 'contentTypeContainer',
 	'metadataSetContainer', 'pageConfigurationSetContainer', 'publishSetContainer',
-	'dataDefinitionContainer', 'workflowDefinitionContainer',
+	'dataDefinitionContainer', 'workflowDefinitionContainer', 'transportContainer',
 	'assetFactory', 'contentType',
-	'metaDataSet', 'pageConfigurationSet', 'publishSet',
+	'metadataSet', 'pageConfigurationSet', 'publishSet',
 	'dataDefinition', 'workflowDefinition',
 	'user', 'group',
     );
-    if ($oldSite != 'Global' && $newSite != 'Global') { # new "Sites"
+    if ($oldSite != '' && $newSite != '') { # new "Sites"
       #array_push($types, 'connector');
-      #array_push($types, 'transport');
-      #array_push($types, 'destination');
+      array_push($types, 'transport');
+      array_push($types, 'destination');
     }
     foreach ($types as $type) {
 	$ptype = $type;
@@ -1570,7 +1980,7 @@ function showForm() {
 <title>Copy assets between sites or environments</title>
 </head>
 <body>
-<h1>Copy Site or Folder</h1>
+<h1>Copy Site</h1>
 <form method="post">
 <table border="0">
 <tr><td></td><th align="left">Source</th><th align="left">Destination</th></tr>
@@ -1590,13 +2000,9 @@ function showForm() {
 <tr><th align="left">Site</th>
 <td>
     <input type="text" name="site1" value="$oldSite" />
-    
-</td>
-<td>
+</td><td>
     <input type="text" name="site2" $site2_str />
-    <span>&lt;sitename&gt; or <em>Global</em> to copy from/to the Global area</span>
-</td>
-</tr>
+</td></tr>
 <tr><th align="left"> Web Services Username</th>
 <td>
     <input type="text" name="username1" value="$uname" />
@@ -1626,7 +2032,8 @@ function showForm() {
 <tr><th align="left">Assets to Skip</th>
 <td colspan="2">
     <input type="text" name="skipPattern" value="$skipPattern" />
-    <em>(e.g. images/ or .mp3)<br />
+    <em>(e.g. images/ or .mp3)
+    </select><br />
 </td></tr>
 <tr><th align="left">Options</th>
 <td colspan="2">
@@ -1644,7 +2051,7 @@ function showForm() {
 <p><strong>Note:</strong>
 We follow dependencies when copying, and may need to copy more than you'd think.
 For example, when copying a folder, 
-we may need to copy the folder's metadata Set, or groups that have access to that folder.
+we may need to copy the folder's metadata set, or groups that have access to that folder.
 When copying a group, we may need to copy its base asset factory, and so on.
 </p>
 
@@ -1674,7 +2081,12 @@ END;
 
 function cleanexit() {
     global $dryrun;
+    global $been_here_done_this;
 
+    if (!$been_here_done_this) {
+	$been_here_done_this++;
+	setPermissions();
+    }
     if ($dryrun) {
       echo "Dry Run Aborted.\n";
     } else {
@@ -1688,6 +2100,11 @@ function cleanexit() {
 function cleanup($xml) {
       $xml = preg_replace('/>/', ">\n", $xml);
       return htmlspecialchars($xml);
+      #$config = array('indent' => true, 'output-xhtml' => true);
+      #$tidy = new tidy($xml);
+      #$tidy->parseString($xml, $config, 'utf8');
+      #$tidy->cleanRepair();
+      #return $tidy;
 }
 
 

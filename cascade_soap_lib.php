@@ -27,6 +27,7 @@ class CascadeSoapClient {
       }
     }
 
+
     /* Read an asset from Cascade with web services.
      * Create an associative array that we will pass to the PHP
      * SOAP functions. The structure of this array is determined
@@ -115,6 +116,8 @@ class CascadeSoapClient {
 	$this->response = $this->client->create($params);
 	if ($this->response->createReturn->success == 'true') {
 	    $this->success = true;
+	    $this->createdAssetId =
+		$this->response->createReturn->createdAssetId;
 	}
 
       } catch (Exception $e) {
@@ -207,19 +210,32 @@ class CascadeSoapClient {
 
 
     /*
-     * Read access rights with web services
+     * Get access rights with web services
      */
     function readAccessRights($id) {
 
+      if (isset($id->id)) {
+	$identifier = array(
+	    'type' => $id->type,
+	    'id'   => $id->id,
+	  );
+      } else if (isset($id->siteId)) {
+	$identifier = array(
+	    'type' => $id->type,
+	    'path' => array( 'path' => $id->path, 'siteId' => $id->siteId ),
+	  );
+      } else {
+	$identifier = array(
+	    'type' => $id->type,
+	    'path' => array( 'path' => $id->path, 'siteName' => $id->siteName ),
+	  );
+      }
       $params = array (
-	'authentication' => array(
-	  'username' => $this->username,
-	  'password' => $this->password,
-	),
-	'identifier' => array(
-	  'type' => $id->type,
-	  'path' => array( 'path' => $id->path, 'siteName' => $id->siteName ),
-        )
+	  'authentication' => array(
+	    'username' => $this->username,
+	    'password' => $this->password,
+	  ),
+	  'identifier' => $identifier,
       );
       //print_r($params);
 
@@ -269,6 +285,7 @@ class CascadeSoapClient {
     }
 }
 
+
 #
 # Clients should never see entityType, but Cascade includes
 # it when we read assets, so we remove it here.  Otherwise,
@@ -314,57 +331,15 @@ function remove_entityType(&$obj) {
 }
 
 #
-# Remove any empty assets
+# Remove empty assets and all entityTypes
 #
 function clean_asset(&$obj) {
-    $types = array(
-	'workflowConfiguration',
-	'feedBlock',
-	'indexBlock',
-	'textBlock',
-#	'xhtmlBlock',
-	'xmlBlock',
-	'file',
-	'folder',
-	'page',
-	'reference',
-	'xsltFormat',
-	'scriptFormat',
-	'symlink',
-	'template',
-	'user',
-	'group',
-	'role',
-	'assetFactory',
-	'assetFactoryContainer',
-	'contentType',
-	'contentTypeContainer',
-	'pageConfigurationSet',
-	'pageConfigurationSetContainer',
-	'dataDefinition',
-	'dataDefinitionContainer',
-	'metadataSet',
-	'metadataSetContainer',
-	'publishSet',
-	'publishSetContainer',
-	'target',
-	'siteDestinationContainer',
-	'destination',
-	'databaseTransport',
-	'fileSystemTransport',
-	'ftpTransport',
-	'transportContainer',
-	'workflowDefinition',
-	'workflowDefinitionContainer',
-	'connectorContainer',
-	'twitterConnector',
-	'wordPressConnector',
-	'site',
-	'xhtmlDataDefinitionBlock',
-    );
-    foreach ($types as $type) {
-	if (!$obj->$type) unset($obj->$type);
-	if (isset($obj->$type)) remove_entityType($obj->$type);
+    foreach ($obj as $var => $value) {
+	if ($value) {
+	    remove_entityType($obj->$var);
+	} else {
+	    unset($obj->$var);
+	}
     }
 }
 

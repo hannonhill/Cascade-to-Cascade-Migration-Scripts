@@ -12,8 +12,8 @@
   */
 error_reporting(E_ALL ^ E_NOTICE);	# ignore undefined variables
 ini_set("display_errors",1);
-ini_set("max_execution_time",300);
-ini_set("memory_limit",'256M');
+ini_set("max_execution_time",600);
+ini_set("memory_limit",'512M');
 include_once("cascade_soap_lib.php");
 
 /* Configuration */
@@ -29,17 +29,24 @@ $dryrun = 0;
 $exit_on_error = 1;
 $copytype = 'folder';
 $oldPath = '/';
+$firstPass = true;
 ob_implicit_flush(true);
 ob_end_flush();
+?>
+<!-- Latest compiled and minified CSS -->
+<link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css">
+<!-- Latest compiled and minified JavaScript -->
+<script src="//netdna.bootstrapcdn.com/bootstrap/3.0.0/js/bootstrap.min.js"></script>
 
+<?php
 if (!empty($_POST) && validateInput()) {
     showForm();
-    #echo "Get ready, get set and ...";
-    #echo "<pre>";
-    #print_r($_POST);
-    #echo "</pre>";
-    echo "<pre>";
+    echo "<pre>First pass...\n";
     update();
+    echo "</pre>";
+	$firstPass = false;
+	echo "<pre>Second pass...\n";
+    editPages();
     echo "</pre>";
 } else {
     showForm();
@@ -66,7 +73,7 @@ function update() {
     } else {
 	$readClient->url = "$proto://" . $host . "/ws/services/AssetOperationService?wsdl";
     }
-    #echo "From $readClient->url<br/>\n";
+    
     $readClient->username = $uname;
     $readClient->password = $pass;
     $readClient->connect();
@@ -77,7 +84,7 @@ function update() {
     } else {
 	$writeClient->url = "$proto://$host2/ws/services/AssetOperationService?wsdl";
     }
-    #echo "To $writeClient->url<br/>\n";
+    
     $writeClient->username = $uname2;
     $writeClient->password = $pass2;
     $writeClient->connect();
@@ -93,13 +100,11 @@ function update() {
     $adminAreas = array(
 	'assetFactory', 'contentType', 'dataDefinition',
 	'metadataSet', 'pageConfigurationSet', 'publishSet',
-	#'transport',
 	'workflowDefinition'
 	);
     if ($oldSite == '' && $newSite == '') {        # old "sites"
 	array_push($adminAreas, 'target');
     } else if ($oldSite != '' && $newSite != '') { # new "Sites"
-	#array_push($adminAreas, 'connector');
 	array_push($adminAreas, 'transport');
 	array_push($adminAreas, 'destination');
     }
@@ -151,6 +156,362 @@ function update() {
     }
 }
 
+/*
+* On the second pass, edit the pages that are in the structuredPages array
+*/
+function editPages() {
+    global $oldPath;
+    global $oldSite, $newSite;
+    global $readClient, $writeClient;
+    global $folderStack;
+    global $pageStack;
+    global $refStack;
+    global $genericStack;
+    global $templateStack;
+    global $skipPattern;
+    global $added;
+    global $exit_on_error;
+    global $structuredPages;
+    global $firstPass;
+	
+    //if it's the second pass and there are pages to edit
+    if(!$firstPass && is_array($structuredPages)) {
+    	//loop through each page and get the page from read and update write based on it
+	foreach($structuredPages as $pagePath) {
+	    //get the page from the readClient
+	    $readAsset = getReadAsset($pagePath, "page");
+	    $writeAsset = getWriteAsset($pagePath, "page");
+		
+	    //edit the page on the writeClient
+	    updateWriteAsset($readAsset, $writeAsset);
+	} //end foreach structured page
+    } //end if structured pages and second pass
+	
+    return true;
+}
+
+
+/*
+* read the asset from the oldSite and return the object
+*/
+function getReadAsset($path, $type) {
+    global $oldPath;
+    global $oldSite, $newSite;
+    global $readClient, $writeClient;
+	
+    if (isset($id)) {
+      $ident->id = $id;
+    }
+    $ident->path = $path;
+    $ident->siteName = $oldSite;
+    $ident->type = $type;
+    $readClient->read($ident);
+    if (!$readClient->success) {
+      echo "getReadAsset(): Read failure on $type $path: " . cleanup($readClient->response);
+      print_r($ident);
+      if ($exit_on_error) cleanexit(); else return;
+    }
+    return $readClient->asset;	
+}
+
+/*
+* read the asset from the newSite and return the object
+*/
+function getWriteAsset($path, $type) {
+    global $oldPath;
+    global $oldSite, $newSite;
+    global $readClient, $writeClient;
+	
+    if (isset($id)) {
+      $ident->id = $id;
+    }
+    $ident->path = $path;
+    $ident->siteName = $newSite;
+    $ident->type = $type;
+    $writeClient->read($ident);
+    if (!$writeClient->success) {
+      echo "getWriteAsset(): Read failure on $type $path: " . cleanup($writeClient->response);
+      print_r($ident);
+      if ($exit_on_error) cleanexit(); else return;
+    }
+    return $writeClient->asset;	
+}
+
+/*
+* update the asset on the newSite
+*/
+function updateWriteAsset($readAsset, $writeAsset) {
+	global $oldPath, $newPath;
+    global $oldSite, $newSite;
+    global $readClient, $writeClient;
+    global $dryrun;
+    global $verbose;
+    global $checked;
+    global $exit_on_error;
+    global $newId;
+    global $extension;
+	global $firstPass;
+	global $structuredPages;
+	
+	$dataDefinitionFields = $readAsset->page->structuredData->structuredDataNodes->structuredDataNode;//->structuredDataNodes->structuredDataNode;
+	//a. if there are multiple DD fields
+	if(is_array($dataDefinitionFields)) {
+		for($h = 0; $h < sizeof($dataDefinitionFields); $h++) {
+			//page chooser
+			if($dataDefinitionFields[$h]->pageId && $dataDefinitionFields[$h]->pagePath) {
+				$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->pageId = getWriteAssetID($dataDefinitionFields[$h]->pagePath, 'page');	
+			} 
+			
+			//file chooser
+			if($dataDefinitionFields[$h]->fileId && $dataDefinitionFields[$h]->filePath) {
+				$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->fileId = getWriteAssetID($dataDefinitionFields[$h]->filePath, 'file');	
+			}
+			
+			//block chooser
+			if($dataDefinitionFields[$h]->blockId && $dataDefinitionFields[$h]->blockPath) {
+				$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->blockId = getWriteAssetID($dataDefinitionFields[$h]->blockPath, 'block');	
+			}
+			
+			//link chooser
+			if($dataDefinitionFields[$h]->symlinkId && $dataDefinitionFields[$h]->symlinkPath) {
+				$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->symlinkId = getWriteAssetID($dataDefinitionFields[$h]->symlinkPath, 'symlink');	
+			}
+			
+			//groups
+			$groupDataDefinition = $dataDefinitionFields[$h]->structuredDataNodes->structuredDataNode;
+			//b. if there are multiple DD fields in a group field
+			if(is_array($groupDataDefinition)){
+				for($i = 0; $i < sizeof($groupDataDefinition); $i++) {
+					//page chooser
+					if($groupDataDefinition[$i]->pageId && $groupDataDefinition[$i]->pagePath) {
+						$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->pageId = getWriteAssetID($groupDataDefinition[$i]->pagePath, 'page');	
+					} 
+					
+					//file chooser
+					if($groupDataDefinition[$i]->fileId && $groupDataDefinition[$i]->filePath) {
+						$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->fileId = getWriteAssetID($groupDataDefinition[$i]->filePath, 'file');	
+					}
+					
+					//block chooser
+					if($groupDataDefinition[$i]->blockId && $groupDataDefinition[$i]->blockPath) {
+						$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->blockId = getWriteAssetID($groupDataDefinition[$i]->blockPath, 'block');	
+					}
+					
+					//link chooser
+					if($groupDataDefinition[$i]->symlinkId && $groupDataDefinition[$i]->symlinkPath) {
+						$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->symlinkId = getWriteAssetID($groupDataDefinition[$i]->symlinkPath, 'symlink');	
+					}
+					
+					//sub groups
+					$subDataDefinition = $groupDataDefinition[$i]->structuredDataNodes->structuredDataNode;
+					//c. if there are multiple DD fields in the subgroup field
+					if(is_array($subDataDefinition)){
+						for($j = 0; $j < sizeof($subDataDefinition); $j++) {
+							//page chooser
+							if($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->pageId && $groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->pagePath) {
+								$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->structuredDataNodes->structuredDataNode[$j]->pageId = getWriteAssetID($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->pagePath, 'page');	
+							} 
+							
+							//file chooser
+							if($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->fileId && $groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->filePath) {
+								$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->structuredDataNodes->structuredDataNode[$j]->fileId = getWriteAssetID($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->filePath, 'file');	
+							}
+							
+							//block chooser
+							if($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->blockId && $groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->blockPath) {
+								$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->structuredDataNodes->structuredDataNode[$j]->blockId = getWriteAssetID($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->blockPath, 'block');	
+							}
+							
+							//link chooser
+							if($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->symlinkId && $groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->symlinkPath) {
+								$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->structuredDataNodes->structuredDataNode[$j]->symlinkId = getWriteAssetID($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode[$j]->symlinkPath, 'symlink');	
+							}
+						} //end for loop
+					} else {//end c. if there are multiple DD fields in the subgroup
+						//page chooser
+							if($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->pageId && $groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->pagePath) {
+								$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->structuredDataNodes->structuredDataNode->pageId = getWriteAssetID($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->pagePath, 'page');	
+							} 
+							
+							//file chooser
+							if($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->fileId && $groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->filePath) {
+								$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->structuredDataNodes->structuredDataNode->fileId = getWriteAssetID($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->filePath, 'file');	
+							}
+							
+							//block chooser
+							if($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->blockId && $groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->blockPath) {
+								$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->structuredDataNodes->structuredDataNode->blockId = getWriteAssetID($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->blockPath, 'block');	
+							}
+							
+							//link chooser
+							if($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->symlinkId && $groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->symlinkPath) {
+								$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode[$i]->structuredDataNodes->structuredDataNode->symlinkId = getWriteAssetID($groupDataDefinition[$i]->structuredDataNodes->structuredDataNode->symlinkPath, 'symlink');	
+							}
+					} // end else c. if there are subgroups
+				} //end for loop
+			} else { //end b. if there are multiple DD fields in the group field
+				//there is only one DD field in the group field
+				//page chooser
+				if($groupDataDefinition->pageId && $groupDataDefinition->pagePath) {
+					$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode->pageId = getWriteAssetID($groupDataDefinition->pagePath, 'page');	
+				} 
+				
+				//file chooser
+				if($groupDataDefinition->fileId && $groupDataDefinition->filePath) {
+					$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode->fileId = getWriteAssetID($groupDataDefinition->filePath, 'file');	
+				}
+				
+				//block chooser
+				if($groupDataDefinition->blockId && $groupDataDefinition->blockPath) {
+					$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode->blockId = getWriteAssetID($groupDataDefinition->blockPath, 'block');	
+				}
+				
+				//link chooser
+				if($groupDataDefinition->symlinkId && $groupDataDefinition->symlinkPath) {
+					$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode->symlinkId = getWriteAssetID($groupDataDefinition->symlinkPath, 'symlink');	
+				}
+				
+				//sub groups
+				$subDataDefinition = $groupDataDefinition->structuredDataNodes->structuredDataNode;
+				//c. if there are multiple DD fields in the subgroup field
+				if(is_array($subDataDefinition)){
+					for($j = 0; $j < sizeof($subDataDefinition); $j++) {
+						//page chooser
+						if($groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->pageId && $groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->pagePath) {
+							$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode[$j]->pageId = getWriteAssetID($groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->pagePath, 'page');	
+						} 
+						
+						//file chooser
+						if($groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->fileId && $groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->filePath) {
+							$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode[$j]->fileId = getWriteAssetID($groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->filePath, 'file');	
+						}
+						
+						//block chooser
+						if($groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->blockId && $groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->blockPath) {
+							$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode[$j]->blockId = getWriteAssetID($groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->blockPath, 'block');	
+						}
+						
+						//link chooser
+						if($groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->symlinkId && $groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->symlinkPath) {
+							$readAsset->page->structuredData->structuredDataNodes->structuredDataNode[$h]->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode[$j]->symlinkId = getWriteAssetID($groupDataDefinition->structuredDataNodes->structuredDataNode[$j]->symlinkPath, 'symlink');	
+						}
+					} //end for loop
+				} //end c. if there are multiple DD fields in the subgroup
+	
+			} //end b. else group field
+		}
+	} else { //end a. if there are multiple DD fields
+	
+		//page chooser
+		if($dataDefinitionFields->pageId && $dataDefinitionFields->pagePath) {
+			$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->pageId = getWriteAssetID($dataDefinitionFields->pagePath, 'page');	
+		}
+		
+		//file chooser
+		if($dataDefinitionFields->fileId && $dataDefinitionFields->filePath) {
+			$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->fileId = getWriteAssetID($dataDefinitionFields->filePath, 'file');	
+		}
+		
+		//block chooser
+		if($dataDefinitionFields->blockId && $dataDefinitionFields->blockPath) {
+			$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->blockId = getWriteAssetID($dataDefinitionFields->blockPath, 'block');	
+		}
+		
+		//link chooser
+		if($dataDefinitionFields->symlinkId && $dataDefinitionFields->symlinkPath) {
+			$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->symlinkId = getWriteAssetID($dataDefinitionFields->symlinkPath, 'symlink');	
+		}
+		
+		//groups
+		$groupDataDefinition = $dataDefinitionFields->structuredDataNodes->structuredDataNode;
+		//b. if there are multiple DD fields in a group field
+		if(is_array($groupDataDefinition)){
+			for($i = 0; $i < sizeof($groupDataDefinition); $i++) {
+				//page chooser
+				if($groupDataDefinition[$i]->pageId && $groupDataDefinition[$i]->pagePath) {
+					$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode[$i]->pageId = getWriteAssetID($groupDataDefinition[$i]->pagePath, 'page');	
+				} 
+				
+				//file chooser
+				if($groupDataDefinition[$i]->fileId && $groupDataDefinition[$i]->filePath) {
+					$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode[$i]->fileId = getWriteAssetID($groupDataDefinition[$i]->filePath, 'file');	
+				}
+				
+				//block chooser
+				if($groupDataDefinition[$i]->blockId && $groupDataDefinition[$i]->blockPath) {
+					$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode[$i]->blockId = getWriteAssetID($groupDataDefinition[$i]->blockPath, 'block');	
+				}
+				
+				//link chooser
+				if($groupDataDefinition[$i]->symlinkId && $groupDataDefinition[$i]->symlinkPath) {
+					$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode[$i]->symlinkId = getWriteAssetID($groupDataDefinition[$i]->symlinkPath, 'symlink');	
+				}
+			}
+		} else { // end b.
+			//there is only one DD field in the group field
+			//page chooser
+			if($groupDataDefinition->pageId && $groupDataDefinition->pagePath) {
+				$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode->pageId = getWriteAssetID($groupDataDefinition->pagePath, 'page');	
+			} 
+			
+			//file chooser
+			if($groupDataDefinition->fileId && $groupDataDefinition->filePath) {
+				$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode->fileId = getWriteAssetID($groupDataDefinition->filePath, 'file');	
+			}
+			
+			//block chooser
+			if($groupDataDefinition->blockId && $groupDataDefinition->blockPath) {
+				$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode->blockId = getWriteAssetID($groupDataDefinition->blockPath, 'block');	
+			}
+			
+			//link chooser
+			if($groupDataDefinition->symlinkId && $groupDataDefinition->symlinkPath) {
+				$readAsset->page->structuredData->structuredDataNodes->structuredDataNode->structuredDataNodes->structuredDataNode->symlinkId = getWriteAssetID($groupDataDefinition->symlinkPath, 'symlink');	
+			}	
+		}
+	} //end if else is array data definition fields
+	
+	//replace the write page DD with the read DD
+	$writeAsset->page->structuredData = $readAsset->page->structuredData;
+	if (!$dryrun) {
+      $writeClient->edit($writeAsset);
+      if ($writeClient->success) {
+		$newId[$ident->id] = $writeClient->page->id;
+		remember($ident);
+      } else { //else if write successful
+		echo "updateWriteAsset(): Failed: " . $writeAsset->page->path . "\n";
+		print_r($writeAsset);
+		echo cleanup($writeClient->response);
+		print_r($readAsset);
+        if ($exit_on_error) cleanexit(); else return false;
+      } //is not successful write
+    } //if not dry run
+	
+	if($verbose>1) echo "Updated page " . $writeAsset->page->path . "\n";
+	
+	return true;
+}
+
+
+/*
+* Get the ID of the asset on the newSite given the path and type
+*/
+function getWriteAssetID($path, $type) {
+	global $oldPath;
+    global $oldSite, $newSite;
+    global $readClient, $writeClient;
+	
+    $ident->path = $path;
+    $ident->siteName = $newSite;
+    $ident->type = $type;
+    $writeClient->read($ident);
+    if (!$writeClient->success) {
+      echo "getWriteAssetID('$path', '$type'): Read failure on $type $path: " . cleanup($writeClient->response);
+      print_r($ident);
+      if ($exit_on_error) cleanexit(); else return;
+    }
+    return $writeClient->asset->$type->id;	
+}
 
 
 /*
@@ -168,6 +529,8 @@ function add_folder($id,$path) {
     global $skipPattern;
     global $added;
     global $exit_on_error;
+    global $structuredPages;
+    global $firstPass;
 
     $type = 'folder';
     #
@@ -271,6 +634,8 @@ function checkAsset($id, $path, $type) {
     global $exit_on_error;
     global $newId;
     global $extension;
+    global $firstPass;
+	global $structuredPages;
 
     if (preg_match("/block_.*/",$type)) {
 	$type = "block";
@@ -345,6 +710,12 @@ target environment.  You must change this before the copy can proceed.
     }
     $asset = $readClient->asset;
 
+	//remove the structured data from the page on the first pass
+	if($firstPass && isset($asset->page->structuredData)) { 
+		unset($asset->page->structuredData);	
+		$structuredPages[$asset->page->path] = $asset->page->path;
+	}
+
     $otype = $type;
     if (!isset($asset->$type)) {
       if (isset($asset->indexBlock)) {
@@ -377,8 +748,7 @@ target environment.  You must change this before the copy can proceed.
 	  $newId[$id] = $id;
       }
       if ($verbose>2) 
-	echo "Skipping $type $path (site " . $asset->$type->siteName . ")\n";
-      #print_r($asset);
+		echo "Skipping $type $path (site " . $asset->$type->siteName . ")\n";
       return;
     }
 
@@ -392,13 +762,12 @@ target environment.  You must change this before the copy can proceed.
     #
     $parent = preg_replace("#/[^/]*$#", "", $path);
     if (isset($checked["folder.$parent"])) {
-	# we know it doesn't exist
-	#echo "Not checking $type: $path\n";
+		# we know it doesn't exist
+
     } else if (isset($newId["$otype.$path"])) {
-	# we know it does exist
-	$newId[$asset->$type->id] = $newId["$otype.$path"];
-#echo "Found new Id for $type $path\n";
-	return;
+		# we know it does exist
+		$newId[$asset->$type->id] = $newId["$otype.$path"];
+		return;
     } else {
       if ($verbose>3) echo "Checking new $type: " . getPath($path) . "\n";
       $newident->path = getPath($path);
@@ -406,12 +775,11 @@ target environment.  You must change this before the copy can proceed.
       $newident->type = $ident->type;
       $writeClient->read($newident);
       if ($writeClient->success) {
-	  $newasset = $writeClient->asset;
-	  $newId[$asset->$type->id] = $newasset->$type->id;
-#echo "Found2 new Id for $type $path\n";
-	  return;
+		  $newasset = $writeClient->asset;
+		  $newId[$asset->$type->id] = $newasset->$type->id;
+		  return;
       } else if (preg_match('/Unable to identify/',$writeClient->response)) {
-	#echo "Can't find " . $newident->path . " in $newSite\n";
+
       } else {
 	echo "Read failure on destination: " . getPath($path) . cleanup($writeClient->response);
 	print_r($newident);
@@ -1980,6 +2348,7 @@ function showForm() {
 <title>Copy assets between sites or environments</title>
 </head>
 <body>
+<div class="container">
 <h1>Copy Site</h1>
 <form method="post">
 <table border="0">
@@ -2017,7 +2386,7 @@ function showForm() {
 </td></tr>
 <tr><th align="left">Folder/Container</th>
 <td colspan="2">
-    <input type="text" name="folder1" value="$oldPath" />
+    <input type="text" name="folder1" value="$oldPath" size="40" />
 <!--
 </td><td>
     <input type="text" name="folder2" value="$newPath" />
@@ -2037,9 +2406,9 @@ function showForm() {
 </td></tr>
 <tr><th align="left">Options</th>
 <td colspan="2">
-    <input type="checkbox" name="dryrun" value="1" $dryrun_str />Dry Run<br />
-    <input type="checkbox" name="verbose" value="3" $verbose_str />Verbose<br />
-    <input type="checkbox" name="continue" value="1" $continue_str />Persevere in the face of adversity<br />
+    <input type="checkbox" name="dryrun" value="1" $dryrun_str /> Dry Run<br />
+    <input type="checkbox" name="verbose" value="3" $verbose_str /> Verbose<br />
+    <input type="checkbox" name="continue" value="1" $continue_str /> Persevere in the face of adversity<br />
 </td></tr>
 <tr><td></td>
 <td> <input type="submit" value="Submit" />
@@ -2092,7 +2461,7 @@ function cleanexit() {
     } else {
       echo "Aborted.\n";
     }
-    echo "</body></html>";
+    echo "</div></body></html>";
     exit;
 }
 
@@ -2100,11 +2469,6 @@ function cleanexit() {
 function cleanup($xml) {
       $xml = preg_replace('/>/', ">\n", $xml);
       return htmlspecialchars($xml);
-      #$config = array('indent' => true, 'output-xhtml' => true);
-      #$tidy = new tidy($xml);
-      #$tidy->parseString($xml, $config, 'utf8');
-      #$tidy->cleanRepair();
-      #return $tidy;
 }
 
 

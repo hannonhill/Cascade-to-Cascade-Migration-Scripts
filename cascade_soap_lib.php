@@ -4,6 +4,7 @@
  * PHP SOAP Library for Cascade
  *
  * Earl Fogel, September 2009
+ * Last Modified by Josh LaMar, August 2014
  */
 
 class CascadeSoapClient {
@@ -90,6 +91,56 @@ class CascadeSoapClient {
 	$this->response = $this->client->__getLastResponse() . "\n";
       }
     }
+    
+    
+    /* Read the workflow settings from an asset (e.g. folder) in Cascade with web services.
+     */
+    function readWorkflowSettings($id) {
+
+      if (isset($id->id)) {
+	$identifier = array(
+	    'type' => $id->type,
+	    'id'   => $id->id,
+	  );
+      } else if (isset($id->siteId)) {
+	$identifier = array(
+	    'type' => $id->type,
+	    'path' => array( 'path' => $id->path, 'siteId' => $id->siteId ),
+	  );
+      } else {
+	$identifier = array(
+	    'type' => $id->type,
+	    'path' => array( 'path' => $id->path, 'siteName' => $id->siteName ),
+	  );
+      }
+      $params = array (
+	  'authentication' => array(
+	    'username' => $this->username,
+	    'password' => $this->password,
+	  ),
+	  'identifier' => $identifier,
+      );
+
+      try {
+	/* Pass the parameters to the PHP SOAP client. */
+	$this->success = false;
+	$this->response = $this->client->readWorkflowSettings($params);
+
+	if ($this->response->readWorkflowSettingsReturn->success == 'true') {
+	    $type = $id->type;
+	    $this->asset = $this->response->readWorkflowSettingsReturn->asset;
+	    clean_asset($this->asset);
+	    $this->success = true;
+	}
+
+      } catch (Exception $e) {
+	
+      }
+      if ($this->success != true) {
+	$this->response = $this->client->__getLastResponse() . "\n";
+      }
+    }
+    
 
 
     /* Add an asset (page, file, folder, ...) to Cascade with web services.
@@ -167,6 +218,41 @@ class CascadeSoapClient {
 	$this->response = $this->client->__getLastResponse() . "\n";
       }
     }
+    
+    /* Update a folder's workflow settings in Cascade with web services.
+     * The asset's information should be stored in an associative array, $asset.
+     */
+    function editWorkflowSettings($workflowSettings, $applyInheritWorkflowsToChildren, $applyRequireWorkflowToChildren) {
+
+      /* Construct the parameters for editting the workflow
+       */
+      $params =
+	array (
+	  'authentication' => array(
+	    'username' => $this->username,
+	    'password' => $this->password,
+	  ),
+	  'workflowSettings' => $workflowSettings,
+	  'applyInheritWorkflowsToChildren' => $applyInheritWorkflowsToChildren,
+	  'applyRequireWorkflowToChildren' => $applyRequireWorkflowToChildren,
+	);
+
+      try {
+	$this->success = false;
+	$this->response = $this->client->editWorkflowSettings($params);
+
+	if ($this->response->editWorkflowSettingsReturn->success == 'true') {
+	    $this->success = true;
+	}
+
+      } catch (Exception $e) {
+      	
+      }
+      if ($this->success != true) {
+	$this->response = $this->client->__getLastResponse() . "\n";
+      }
+    }
+
 
 
     /*
